@@ -26,8 +26,9 @@ name: Comment lexicon results (reusable)
 #
 # Comment identity: every comment carries a hidden marker line, and
 # scripts/upsert-comment.sh updates the last Bot-authored comment containing it
-# (or creates one). Only the steps that write comments use the optional
-# `github-token` secret; `gather` and the artifact download use github.token.
+# (or creates one). When `app-id` is set, the two commenting jobs mint a
+# short-lived GitHub App token (pull requests: write only) and the steps that
+# write comments use it; `gather` and the artifact download use github.token.
 # - publish:     on `completed`, posts the results from the artifact, or a
 #                "no lexicon changes" note when validate.yml skipped the checks.
 #
@@ -38,11 +39,19 @@ name: Comment lexicon results (reusable)
 # group, so it can't cancel the newer push's commenting job.
 on:
   workflow_call:
-    secrets:
-      github-token:
+    inputs:
+      app-id:
         description: >-
-          Token to post the PR comment as (for example a GitHub App
-          installation token). Defaults to the workflow's GITHUB_TOKEN.
+          ID of a GitHub App to post the PR comment as. Needs the
+          `app-private-key` secret. When empty, comments are posted as
+          github-actions[bot] using the workflow's GITHUB_TOKEN.
+        type: string
+        default: ""
+    secrets:
+      app-private-key:
+        description: >-
+          Private key of the GitHub App named by `app-id`. The App needs
+          Pull requests: Read & write, installed on this repository.
         required: false
 
 permissions: {}
@@ -113,9 +122,25 @@ jobs:
           path: .lexicon-actions
           persist-credentials: false
 
+      # Optional: comment as a GitHub App instead of github-actions[bot]. The
+      # token is scoped to pull requests: write on this repository only. If
+      # this step is skipped or fails, the commenting steps fall back to
+      # github.token.
+      - name: Create GitHub App token
+        id: app-token
+        if: inputs.app-id != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          # v3 deprecates `app-id` in favour of `client-id`, but `client-id`
+          # takes the App's client ID (Iv...), not the numeric App ID that
+          # our `app-id` input carries.
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          permission-pull-requests: write
+
       - name: Mark pull request results as in progress
         env:
-          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           MARKER: "<!-- lexicon-actions:validation -->"
@@ -150,6 +175,22 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24.x"
+
+      # Optional: comment as a GitHub App instead of github-actions[bot]. The
+      # token is scoped to pull requests: write on this repository only. If
+      # this step is skipped or fails, the commenting steps fall back to
+      # github.token.
+      - name: Create GitHub App token
+        id: app-token
+        if: inputs.app-id != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          # v3 deprecates `app-id` in favour of `client-id`, but `client-id`
+          # takes the App's client ID (Iv...), not the numeric App ID that
+          # our `app-id` input carries.
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          permission-pull-requests: write
 
       # If the artifact is missing (e.g. CI failed before uploading it), keep
       # going so the in-progress comment is replaced with an error instead of
@@ -236,7 +277,7 @@ jobs:
 
       - name: Add comment to pull request with results
         env:
-          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           MARKER: "<!-- lexicon-actions:validation -->"
@@ -255,7 +296,7 @@ jobs:
       - name: Report comment workflow failure
         if: failure()
         env:
-          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

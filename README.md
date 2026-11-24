@@ -160,15 +160,37 @@ on pull requests that don't touch lexicons. Nothing hangs pending.
 
 ### `comment.yml`
 
-No inputs. It reads everything it needs from the triggering event and the
-`lexicon-check-logs` artifact.
+It reads everything it needs from the triggering event and the
+`lexicon-check-logs` artifact. Both inputs below are optional.
 
-| Secret | Required | Description |
-| --- | --- | --- |
-| `github-token` | no | Token to post the PR comment as (for example a GitHub App installation token). Defaults to the workflow's `GITHUB_TOKEN`. |
+| Input | Type | Default | Description |
+| --- | --- | --- | --- |
+| `app-id` | string | `""` | ID of a GitHub App to post the comment as. When empty, comments post as `github-actions[bot]`. |
+| secret `app-private-key` | secret, optional | | Private key of that App. Required when `app-id` is set. |
 
-Pass it from the caller with `secrets: { github-token: ${{ secrets.MY_TOKEN }} }`.
-Only the steps that create or edit the comment use it.
+To comment as your own App:
+
+1. Create a GitHub App with the repository permission Pull requests: Read & write,
+   and install it on the repository.
+2. Store its App ID as a variable (`LEXICON_APP_ID`) and a generated private key as
+   a secret (`LEXICON_APP_KEY`).
+3. Pass them from the comment caller:
+
+   ```yaml
+   jobs:
+     comment:
+       uses: thisismissem/lexicon-actions/.github/workflows/comment.yml@v1
+       permissions:
+         pull-requests: write
+         actions: read
+       with:
+         app-id: ${{ vars.LEXICON_APP_ID }}
+       secrets:
+         app-private-key: ${{ secrets.LEXICON_APP_KEY }}
+   ```
+
+Comments then appear as `<app-name>[bot]`. The workflow mints a short-lived token
+with only `pull-requests: write`, scoped to the current repository.
 
 ### `publish.yml`
 
@@ -238,8 +260,8 @@ checked.
 
 ## Known limitations
 
-- Comments post as `github-actions[bot]` unless a `github-token` secret is passed to
-  `comment.yml`. The workflow finds its own comment by a hidden marker in the body,
+- Comments post as `github-actions[bot]` unless `app-id` and `app-private-key` are passed
+  to `comment.yml`. The workflow finds its own comment by a hidden marker in the body,
   and only edits comments authored by a bot, so it won't touch other workflows'
   comments or a user's comment that copies the marker.
 - Linux runners only (x86_64 and arm64).

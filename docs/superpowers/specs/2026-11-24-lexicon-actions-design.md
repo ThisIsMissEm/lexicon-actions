@@ -282,8 +282,9 @@ The behaviour stays as it is in `germ-network/lexicon` today:
       every body. `scripts/upsert-comment.sh` updates the last comment that is Bot-authored
       (`.user.type == "Bot"`, so a user can't plant the marker) and contains it, or
       creates one. The failure fallback keeps an inline copy so it works even if the
-      checkout failed. An optional `github-token` secret sets the commenting identity;
-      it defaults to `github.token`.
+      checkout failed. Optional `app-id` input and `app-private-key` secret: the two commenting
+      jobs mint a GitHub App token (`actions/create-github-app-token`, pull requests:
+      write only) and comment as `<app-name>[bot]`; otherwise they use `github.token`.
   - Cancelled runs are skipped. Concurrency is per job, keyed on head repo plus branch.
 - **publish**: installs goat and runs `goat lex publish -u` with `GOAT_USERNAME` (`did`) and
   `GOAT_PASSWORD` (`app-password`) in that step's environment. goat logs in in memory, so there
