@@ -5,6 +5,13 @@ as safe to ship. None changes the adopter contract.
 
 ## Hardening (patch releases)
 
+- comment.yml: if GitHub App token minting *fails* (not skipped), `in-progress` posts no ⏳.
+  `publish`'s `failure()` fallback then posts as github-actions[bot], so `--edit-last`
+  creates a second comment and the App's ⏳ stays. Fix the code comment at the mint step,
+  which says the steps "fall back"; that's only true when minting is skipped.
+- Plan doc: the Task 5 line still says `report-failures.js "$LOGS_DIR"`; validate.yml now
+  uses `"$RUNNER_TEMP/check-logs"`.
+
 - validate.yml: a rename *within* the lexicons dir drops the old NSID from the "Removed"
   list in the comment (informational only).
 - validate.yml: set `LC_ALL=C` for the bash character-class check. The `lexicon-files`
