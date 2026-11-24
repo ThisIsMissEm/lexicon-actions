@@ -161,7 +161,14 @@ on pull requests that don't touch lexicons. Nothing hangs pending.
 ### `comment.yml`
 
 No inputs. It reads everything it needs from the triggering event and the
-`check-logs` artifact.
+`lexicon-check-logs` artifact.
+
+| Secret | Required | Description |
+| --- | --- | --- |
+| `github-token` | no | Token to post the PR comment as (for example a GitHub App installation token). Defaults to the workflow's `GITHUB_TOKEN`. |
+
+Pass it from the caller with `secrets: { github-token: ${{ secrets.MY_TOKEN }} }`.
+Only the steps that create or edit the comment use it.
 
 ### `publish.yml`
 
@@ -231,9 +238,10 @@ checked.
 
 ## Known limitations
 
-- The comment workflow edits the most recent `github-actions[bot]` comment on the
-  PR (`--edit-last`). In repositories where other workflows also comment as that
-  bot, it may overwrite their comment.
+- Comments post as `github-actions[bot]` unless a `github-token` secret is passed to
+  `comment.yml`. The workflow finds its own comment by a hidden marker in the body,
+  and only edits comments authored by a bot, so it won't touch other workflows'
+  comments or a user's comment that copies the marker.
 - Linux runners only (x86_64 and arm64).
 
 ## Maintainers: bumping goat

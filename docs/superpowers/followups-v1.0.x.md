@@ -1,20 +1,7 @@
 # Follow-ups after v1.0.0
 
 These are open items from the v1.0.0 build reviews (2026-11-24). Every one was triaged
-as safe to ship. None changes the adopter contract unless it's marked as needing a decision.
-
-## Needs a decision (Emelia)
-
-- **Ephemeral publish login.** goat's `loginOrLoadAuthClient` (auth.go:88-108) opens a
-  throwaway session when `GOAT_USERNAME`/`GOAT_PASSWORD` are set on `lex publish`
-  itself. publish.yml could drop the login/check-auth/logout steps. That removes the
-  session file on self-hosted runners and the noisy `always()` logout.
-- **Marketplace eligibility.** GitHub Marketplace may reject action repos that contain
-  workflow files. If it does, setup-goat needs its own repo to be listed. This is moot
-  if Bluesky hosts an official setup-goat.
-- **`--edit-last`** edits the last `github-actions[bot]` comment on a PR. That can
-  clobber other workflows' bot comments, so check adopters (questionable.fyi) before
-  rollout. A longer-term option is a marker-based edit.
+as safe to ship. None changes the adopter contract.
 
 ## Hardening (patch releases)
 
@@ -27,8 +14,6 @@ as safe to ship. None changes the adopter contract unless it's marked as needing
   `::stop-commands::` or drop `ls -R`.
 - comment.yml: the cross-repo checkout runs with no `contents` permission. That's fine
   while lexicon-actions is public; confirm during the first adopter rollout.
-- publish.yml: logout under `always()` fails noisily when goat isn't installed or login
-  failed (superseded by the ephemeral login above).
 - format-comment.js: bare URLs autolink and `:emoji:` shortcodes render in PR-derived
   text.
 - action.yml tests:

@@ -99,8 +99,11 @@ if custom pipelines turn out to be needed.
   validate.yml        # on: workflow_call
   comment.yml         # on: workflow_call
   publish.yml         # on: workflow_call
-action.yml            # root composite action = setup-goat (pinned + verified goat; Marketplace)
+.github/actions/setup-goat/
+  action.yml          # internal composite action: pinned + verified goat (not a public interface)
+  goat-checksums.txt  # pinned per-version SHA-256s, read via $GITHUB_ACTION_PATH
 scripts/format-comment.js
+scripts/upsert-comment.sh
 README.md             # adopter guide (below)
 LICENSE               # MIT
 ```
@@ -178,7 +181,7 @@ The README ships these three files verbatim, as the documented setup.
 | | `fail-on-breaking-warnings` | boolean | `true` | Whether warn-level breaking changes fail `validate-changes` |
 | | `fail-on-dns` | boolean | `true` | Whether DNS failures fail `validate-changes` |
 | comment | (none) | | | Reads everything it needs from the event and the artifact |
-| publish | `did` | string | required | Login identity (`goat account login -u <did>`; goat accepts a handle or DID) |
+| publish | `did` | string | required | Login identity (`GOAT_USERNAME`; goat accepts a handle or DID) |
 | | `goat-version` | string | as above | |
 | | `lexicons-dir` | string | `lexicons/` | |
 | | secret `app-password` | secret | required | App password for that account |
@@ -247,10 +250,11 @@ The behaviour stays as it is in `germ-network/lexicon` today:
 - **validate**:
   - The `detect-changes` job lists PR files via the API. It decides whether lexicons, or the
     adopter's validation caller file, changed. When nothing relevant changed, it
-    uploads a `check-logs` artifact with `{pr, finished: true, skipped: true}`.
+    uploads a `lexicon-check-logs` artifact with `{pr, finished: true, skipped: true}`.
   - The `validate-changes` job (`needs: detect-changes`) runs lint, breaking (JSON), DNS, and the
     informational `goat lex status`, scoped to the changed files. It writes
-    `meta.json` with `{pr, finished}` and uploads `check-logs`.
+    `meta.json` with `{pr, finished}` and uploads `lexicon-check-logs`. All check output is
+    written under `$RUNNER_TEMP/check-logs`, never in the workspace.
   - **DNS detection (decided: blocks by default).** `goat lex check-dns` exits 0 even
     when records are missing (`lex_check_dns.go:60-91` in goat v0.2.9). So today in
     germ, DNS never blocks; only the comment notices, by matching "successfully". The
@@ -274,9 +278,16 @@ The behaviour stays as it is in `germ-network/lexicon` today:
       must be `true`.
     - Formats the comment with `format-comment.js` and posts it.
     - Replaces the ⏳ with a failure comment if any step fails.
+    - Comment identity is a hidden marker, `<!-- lexicon-actions:validation -->`, ending
+      every body. `scripts/upsert-comment.sh` updates the last comment that is Bot-authored
+      (`.user.type == "Bot"`, so a user can't plant the marker) and contains it, or
+      creates one. The failure fallback keeps an inline copy so it works even if the
+      checkout failed. An optional `github-token` secret sets the commenting identity;
+      it defaults to `github.token`.
   - Cancelled runs are skipped. Concurrency is per job, keyed on head repo plus branch.
-- **publish**: installs goat, logs in with `did` and `app-password`, checks auth, runs
-  `goat lex publish -u`, and always logs out.
+- **publish**: installs goat and runs `goat lex publish -u` with `GOAT_USERNAME` (`did`) and
+  `GOAT_PASSWORD` (`app-password`) in that step's environment. goat logs in in memory, so there
+  is no session file, check-auth step or logout step.
 
 ### Getting our own scripts at the right version (key technical risk)
 
@@ -310,7 +321,7 @@ our files does:
 ```
 
 and then runs `.lexicon-actions/scripts/format-comment.js` or
-`uses: ./.lexicon-actions` (the root `setup-goat` action). Why:
+`uses: ./.lexicon-actions/.github/actions/setup-goat` (the internal `setup-goat` action). Why:
 - It's the exact commit the adopter resolved, whether they pinned `@v1` or a SHA, so
   the scripts can't drift from the workflow.
 - It needs no token, because lexicon-actions is public.
@@ -410,12 +421,13 @@ sequence.
   empirically: whether `vars` and the `pulls/{n}/files` call work on a fork PR, and
   whether `workflow_run` `requested` waits for "Approve workflows to run". The README
   documents whatever turns out to be true.
-- ~~Root `action.yml` for Marketplace.~~ **Decided: `setup-goat` becomes the root
-  action** (`uses: thisismissem/lexicon-actions@v1`), listed on Marketplace. It's now a
-  public, versioned contract of its own: inputs `goat-version` and arch auto-detect,
-  output `goat-path`. The reusable workflows use it through the
-  `job.workflow_sha` checkout (`uses: ./.lexicon-actions`). Existing alternatives
-  checked on 2026-11-24, and none is usable:
+- ~~Root `action.yml` for Marketplace.~~ **Decided 2026-11-24: internal action, not
+  listed.** `setup-goat` lives at `.github/actions/setup-goat/` and is not a supported
+  public interface (no `branding:`, no Marketplace listing). The reusable workflows use
+  it through the `job.workflow_sha` checkout
+  (`uses: ./.lexicon-actions/.github/actions/setup-goat`); this repo's own tests use
+  `./.github/actions/setup-goat`. Existing alternatives checked on 2026-11-24, and none
+  is usable:
   - `bluesky-social/github-actions` has no goat action.
   - `studio-b12/setup-goat` installs an unrelated tool, `studio-b12/goat`.
   - `mkizka/lex-publish` defaults to `latest`, doesn't verify, and interpolates its
@@ -423,13 +435,10 @@ sequence.
   - `birbhouse-games/lexicon-tools` fetches `latest` unverified.
 
   **Pending upstream (2026-11-24):** Emelia has asked bnewbold whether Bluesky would
-  host an official setup-goat action.
-  - If they do, and it pins the version and verifies the release, the reusable
-    workflows use it, pinned by SHA. lexicon-actions then drops its root action and the
-    Marketplace listing, and offers our implementation upstream. That also settles key
-    provenance.
-  - Until there's an answer, build setup-goat as an internal step that's easy to swap,
-    and don't list it on Marketplace before `v1.0.0`.
+  host an official setup-goat action. If they do, and it pins the version and verifies
+  the release, the reusable workflows use it, pinned by SHA, and lexicon-actions drops
+  its internal action and offers our implementation upstream. That also settles key
+  provenance.
 - ~~Testing strategy.~~ **Decided: self-test in this repo.**
   - lexicon-actions has its own three caller files, which call its workflows through
     `./.github/workflows/...`. Fixture lexicons live in `test/lexicons/` (passed as
