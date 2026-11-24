@@ -3,14 +3,16 @@
 #
 # Usage: scripts/upsert-comment.sh <body-file>
 # Env:   GH_TOKEN, REPO (owner/name), PULL_REQUEST (number), MARKER (hidden
-#        marker line identifying our comment).
+#        marker line identifying our comment), COMMENT_AUTHOR (login of the
+#        identity GH_TOKEN posts as: github-actions[bot] or <app-slug>[bot]).
 #
-# The comment to update is the LAST comment that is both authored by a Bot
-# and contains MARKER. The `.user.type == "Bot"` check is a security
+# The comment to update is the LAST comment that is authored by a Bot, whose
+# login is exactly COMMENT_AUTHOR, and that contains MARKER. The `.user.type == "Bot"` check is a security
 # boundary: a PR author could post a comment containing the marker, and a
 # write token is able to edit other users' comments. Users can't be Bots, so
-# requiring it means we only ever edit comments posted by an app or
-# github-actions[bot], never one a user wrote.
+# requiring it means we never edit one a user wrote. Matching the login
+# as well means we only edit comments posted by our own identity, never
+# another bot's comment that happens to contain the marker.
 #
 # The body is sent from a file (`-F body=@file`), never interpolated into argv.
 set -euo pipefail
@@ -28,6 +30,10 @@ body_file="$1"
 : "${GH_TOKEN:?GH_TOKEN is required}"
 : "${REPO:?REPO is required}"
 : "${PULL_REQUEST:?PULL_REQUEST is required}"
+if [ -z "${COMMENT_AUTHOR:-}" ]; then
+  echo "::error::COMMENT_AUTHOR is required"
+  exit 1
+fi
 : "${MARKER:?MARKER is required}"
 
 if [[ ! "$PULL_REQUEST" =~ ^[0-9]+$ ]]; then
@@ -45,9 +51,9 @@ if ! grep -qxF -- "$MARKER" "$body"; then
 fi
 
 # --paginate prints one JSON array per page; `jq -s add` joins them.
-comment_id="$(gh api --paginate "repos/$REPO/issues/$PULL_REQUEST/comments" \
-  | jq -rs --arg marker "$MARKER" \
-    'add // [] | map(select(.user.type == "Bot" and ((.body // "") | contains($marker)))) | last | .id // empty')"
+comment_id="$(gh api --paginate "repos/$REPO/issues/$PULL_REQUEST/comments?per_page=100" \
+  | jq -rs --arg marker "$MARKER" --arg author "$COMMENT_AUTHOR" \
+    'add // [] | map(select(.user.type == "Bot" and .user.login == $author and ((.body // "") | contains($marker)))) | last | .id // empty')"
 
 if [ -n "$comment_id" ]; then
   if [[ ! "$comment_id" =~ ^[0-9]+$ ]]; then

@@ -271,6 +271,9 @@ jobs:
           BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
           BLOCK_DNS: ${{ inputs.fail-on-dns }}
         run: |
+          # Not LOGS_DIR from GITHUB_ENV: an earlier step may have failed
+          # before it was exported.
+          LOGS_DIR="$RUNNER_TEMP/check-logs"
           mkdir -p "$LOGS_DIR"
           jq -n \
             --argjson pr "$PR_NUMBER" \
@@ -294,4 +297,4 @@ jobs:
         env:
           BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
           BLOCK_DNS: ${{ inputs.fail-on-dns }}
-        run: node .lexicon-actions/scripts/report-failures.js "$LOGS_DIR"
+        run: node .lexicon-actions/scripts/report-failures.js "$RUNNER_TEMP/check-logs"

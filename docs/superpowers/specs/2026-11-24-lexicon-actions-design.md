@@ -104,6 +104,7 @@ if custom pipelines turn out to be needed.
   goat-checksums.txt  # pinned per-version SHA-256s, read via $GITHUB_ACTION_PATH
 scripts/format-comment.js
 scripts/upsert-comment.sh
+scripts/install-goat.sh
 README.md             # adopter guide (below)
 LICENSE               # MIT
 ```
@@ -180,7 +181,8 @@ The README ships these three files verbatim, as the documented setup.
 | | `lexicons-dir` | string | `lexicons/` | Where lexicon JSON lives. Also drives the `detect-changes` path match |
 | | `fail-on-breaking-warnings` | boolean | `true` | Whether warn-level breaking changes fail `validate-changes` |
 | | `fail-on-dns` | boolean | `true` | Whether DNS failures fail `validate-changes` |
-| comment | (none) | | | Reads everything it needs from the event and the artifact |
+| comment | `app-id` | string | optional (`""`) | ID of a GitHub App to comment as; otherwise `github-actions[bot]` |
+| | secret `app-private-key` | secret | optional | Private key of that App |
 | publish | `did` | string | required | Login identity (`GOAT_USERNAME`; goat accepts a handle or DID) |
 | | `goat-version` | string | as above | |
 | | `lexicons-dir` | string | `lexicons/` | |

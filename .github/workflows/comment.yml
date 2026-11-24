@@ -141,6 +141,9 @@ jobs:
       - name: Mark pull request results as in progress
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          # Must match the identity of GH_TOKEN: empty app-slug (App not
+          # configured, or minting failed) means github.token is used.
+          COMMENT_AUTHOR: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           MARKER: "<!-- lexicon-actions:validation -->"
@@ -278,6 +281,9 @@ jobs:
       - name: Add comment to pull request with results
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          # Must match the identity of GH_TOKEN: empty app-slug (App not
+          # configured, or minting failed) means github.token is used.
+          COMMENT_AUTHOR: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           MARKER: "<!-- lexicon-actions:validation -->"
@@ -291,12 +297,15 @@ jobs:
       # This step deliberately carries its own minimal copy of the upsert in
       # scripts/upsert-comment.sh instead of calling it: it must work even when
       # the checkout of our files is what failed. Keep the two in step,
-      # including the `.user.type == "Bot"` check (a user can't be a Bot, so
-      # we never edit a user's comment that merely contains the marker).
+      # including the `.user.type == "Bot"` and `.user.login == $author` checks (a
+      # user can't be a Bot, and only our own identity's comment is edited).
       - name: Report comment workflow failure
         if: failure()
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          # Must match the identity of GH_TOKEN: empty app-slug (App not
+          # configured, or minting failed) means github.token is used.
+          COMMENT_AUTHOR: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -305,9 +314,9 @@ jobs:
           set -euo pipefail
           printf '%s\n\n%s\n\n%s\n' "## ‼️ Couldn't report validation results" \
             "See the [comment workflow run]($RUN_URL) for details." "$MARKER" > "$RUNNER_TEMP/failure.txt"
-          comment_id="$(gh api --paginate "repos/$REPO/issues/$PULL_REQUEST/comments" \
-            | jq -rs --arg marker "$MARKER" \
-              'add // [] | map(select(.user.type == "Bot" and ((.body // "") | contains($marker)))) | last | .id // empty')"
+          comment_id="$(gh api --paginate "repos/$REPO/issues/$PULL_REQUEST/comments?per_page=100" \
+            | jq -rs --arg marker "$MARKER" --arg author "$COMMENT_AUTHOR" \
+              'add // [] | map(select(.user.type == "Bot" and .user.login == $author and ((.body // "") | contains($marker)))) | last | .id // empty')"
           if [ -n "$comment_id" ]; then
             gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/failure.txt" >/dev/null
           else

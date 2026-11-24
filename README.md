@@ -261,9 +261,11 @@ checked.
 ## Known limitations
 
 - Comments post as `github-actions[bot]` unless `app-id` and `app-private-key` are passed
-  to `comment.yml`. The workflow finds its own comment by a hidden marker in the body,
-  and only edits comments authored by a bot, so it won't touch other workflows'
-  comments or a user's comment that copies the marker.
+  to `comment.yml`. The workflow edits only its own comment: one that carries a hidden
+  marker, is authored by a bot, and was posted by the identity it is currently using.
+  It never touches other workflows' comments or a user's comment that copies the
+  marker. Switching identity (default to App, or back) starts a new comment; the old
+  one stays.
 - Linux runners only (x86_64 and arm64).
 
 ## Maintainers: bumping goat
