@@ -62,8 +62,15 @@ test("readBlocking: only a boolean false disables a gate", () => {
 });
 
 test("readBlocking: breakingWarnings can be disabled", () => {
-  assert.deepEqual(readBlocking({ blocking: { breakingWarnings: false } }), {
+  assert.deepEqual(readBlocking({ blocking: { "breaking-warnings": false } }), {
     breakingWarnings: false,
+    dns: true,
+  });
+});
+
+test("readBlocking: camelCase breakingWarnings key in meta is ignored", () => {
+  assert.deepEqual(readBlocking({ blocking: { breakingWarnings: false } }), {
+    breakingWarnings: true,
     dns: true,
   });
 });

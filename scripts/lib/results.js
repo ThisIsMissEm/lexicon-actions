@@ -50,7 +50,7 @@ function readBlocking(meta) {
   const get = (key) =>
     !(blocking && typeof blocking === "object" && blocking[key] === false);
 
-  return { breakingWarnings: get("breakingWarnings"), dns: get("dns") };
+  return { breakingWarnings: get("breaking-warnings"), dns: get("dns") };
 }
 
 const readText = (file) => fs.readFile(file, "utf8").catch(() => null);
