@@ -187,7 +187,7 @@ jobs:
           persist-credentials: false
 
       - name: Install goat
-        uses: ./.lexicon-actions/.github/actions/setup-goat
+        uses: ./.lexicon-actions/.github/actions/setup-goat # zizmor: ignore[self-repository] intentional: the action comes from the pinned checkout of this repo at job.workflow_sha, a different path than the caller's workspace root
         with:
           goat-version: ${{ inputs.goat-version }}
 

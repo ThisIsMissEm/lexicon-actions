@@ -9,7 +9,7 @@ permissions:
   pull-requests: read
 jobs:
   lexicon:
-    uses: ./.github/workflows/validate.yml
+    uses: ./.github/workflows/validate.yml # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the `$/` syntax
     with:
       # Adopters use `${{ vars.LEXICON_DID }}`. The self-test uses a literal
       # because this repo has no account and no repository variable to set.

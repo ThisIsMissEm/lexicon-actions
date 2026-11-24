@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.x"
@@ -35,7 +37,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: ./.github/actions/setup-goat
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-goat # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the `$/` syntax
         id: goat
       - name: Assert goat is installed
         env:
@@ -49,7 +53,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: ./.github/actions/setup-goat
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-goat # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the `$/` syntax
         id: goat
         continue-on-error: true
         with:
@@ -63,7 +69,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: ./.github/actions/setup-goat
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-goat # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the `$/` syntax
         id: goat
         continue-on-error: true
         with:
@@ -79,6 +87,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - name: Pin tool reproduces the committed v0.2.9 checksums
         run: diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' .github/actions/setup-goat/goat-checksums.txt)
 
@@ -86,6 +96,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       # Official actionlint image (rhysd/actionlint:1.7.7), pinned by digest so
       # the tag can't be moved under us. To bump: take the new tag's digest from
       # https://hub.docker.com/r/rhysd/actionlint/tags
@@ -128,3 +140,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: pinact run --fix=false --verify-comment
+
+  # Official zizmor image (zizmorcore/zizmor 1.32.0, released 2026-11-02),
+  # pinned by digest. Fails on findings at the default (regular) persona.
+  # To bump: take the new tag's digest from
+  # https://github.com/zizmorcore/zizmor/pkgs/container/zizmor
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Run zizmor
+        uses: docker://ghcr.io/zizmorcore/zizmor@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          args: --no-progress .
