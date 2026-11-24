@@ -1,0 +1,10 @@
+[
+  {
+    "file-path": "lexicons/com/example/bad.json",
+    "nsid": "com.example.bad",
+    "lint-level": "warn",
+    "lint-name": "missing-primary-description",
+    "lint-description": "primary types (record, query, procedure, subscription, permission-set) should include a description",
+    "message": "primary type missing a description"
+  }
+]

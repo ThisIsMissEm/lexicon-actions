@@ -1,0 +1,9 @@
+Some lexicon NSIDs did not resolve via DNS:
+
+    com.example.foo.*
+
+To make these resolve, add DNS TXT entries like:
+
+    _lexicon.foo.example.com	TXT	"did=did:plc:example"
+
+Note that DNS management interfaces commonly require only the sub-domain parts of a name, not the full registered domain.
