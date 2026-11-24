@@ -12,7 +12,7 @@ as safe to ship. None changes the adopter contract.
 - comment.yml: attacker-chosen text reaches stdout (`ls -R`, `cat comment.txt`) and is
   parsed for `::` workflow commands. The impact is negligible today. Wrap those steps in
   `::stop-commands::` or drop `ls -R`.
-- comment.yml: the cross-repo checkouts (in the `in-progress` and `publish` jobs) run with no `contents` permission. That's fine
+- comment.yml: the cross-repo checkout runs with no `contents` permission. That's fine
   while lexicon-actions is public; confirm during the first adopter rollout.
 - format-comment.js: bare URLs autolink and `:emoji:` shortcodes render in PR-derived
   text.

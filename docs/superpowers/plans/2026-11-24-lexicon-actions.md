@@ -15,7 +15,7 @@
 ## Amendments (2026-11-24, after final review)
 
 - A: check logs are written to `$RUNNER_TEMP/check-logs`; the artifact is renamed `lexicon-check-logs`.
-- B: PR comments carry a hidden marker and are upserted by `scripts/upsert-comment.sh` (last Bot-authored comment with the marker).
+- B: comment identity via an optional GitHub App (`app-id` / `app-private-key`); comments still use `gh pr comment --edit-last`, with no comment-tagging scheme.
 - C: setup-goat is internal, at `.github/actions/setup-goat/` (with the checksums); no root action, no Marketplace.
 - D: publish uses an ephemeral in-memory login (`GOAT_USERNAME`/`GOAT_PASSWORD` on `goat lex publish`); no login, check-auth or logout steps.
 - E: the goat install logic lives in `scripts/install-goat.sh`; the action just calls it.

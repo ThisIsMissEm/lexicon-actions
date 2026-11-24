@@ -23,14 +23,14 @@ name: Comment lexicon results (reusable)
 # Jobs:
 # - gather:      finds the open PR whose head is the checked commit (read-only).
 # - in-progress: on `requested`, marks the PR comment as in progress.
-#
-# Comment identity: every comment carries a hidden marker line, and
-# scripts/upsert-comment.sh updates the last Bot-authored comment containing it
-# (or creates one). When `app-id` is set, the two commenting jobs mint a
-# short-lived GitHub App token (pull requests: write only) and the steps that
-# write comments use it; `gather` and the artifact download use github.token.
 # - publish:     on `completed`, posts the results from the artifact, or a
 #                "no lexicon changes" note when validate.yml skipped the checks.
+#
+# Comment identity: comments are created or edited with `gh pr comment
+# --edit-last`, i.e. the most recent comment by the posting identity. By default
+# that is github-actions[bot]. When `app-id` is set, the two commenting jobs mint
+# a short-lived GitHub App token (pull requests: write only) so comments come
+# from the App instead; `gather` and the artifact download use github.token.
 #
 # Concurrency is set only on the two commenting jobs, not on the workflow or on
 # `gather`. Only the latest state per PR branch matters, so a newer commenting
@@ -113,15 +113,6 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      # Only this reusable workflow's own repository, at the commit being run.
-      - name: Checkout lexicon-actions
-        uses: actions/checkout@v6
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: .lexicon-actions
-          persist-credentials: false
-
       # Optional: comment as a GitHub App instead of github-actions[bot]. The
       # token is scoped to pull requests: write on this repository only. If
       # this step is skipped or fails, the commenting steps fall back to
@@ -141,15 +132,10 @@ jobs:
       - name: Mark pull request results as in progress
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          # Must match the identity of GH_TOKEN: empty app-slug (App not
-          # configured, or minting failed) means github.token is used.
-          COMMENT_AUTHOR: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
-          MARKER: "<!-- lexicon-actions:validation -->"
         run: |
-          printf '%s\n' "## ⏳ Validation in progress" > "$RUNNER_TEMP/in-progress.txt"
-          .lexicon-actions/scripts/upsert-comment.sh "$RUNNER_TEMP/in-progress.txt"
+          gh pr comment "$PULL_REQUEST" --create-if-none --edit-last --body "## ⏳ Validation in progress" --repo "$REPO"
 
   publish:
     runs-on: ubuntu-latest
@@ -281,44 +267,22 @@ jobs:
       - name: Add comment to pull request with results
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          # Must match the identity of GH_TOKEN: empty app-slug (App not
-          # configured, or minting failed) means github.token is used.
-          COMMENT_AUTHOR: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
-          MARKER: "<!-- lexicon-actions:validation -->"
           COMMENT_FILE: ${{ runner.temp }}/comment.txt
-        run: .lexicon-actions/scripts/upsert-comment.sh "$COMMENT_FILE"
+        run: |
+          gh pr comment "$PULL_REQUEST" --create-if-none --edit-last --body-file "$COMMENT_FILE" --repo "$REPO"
 
       # If anything above failed, replace the in-progress comment so the PR
       # isn't left showing ⏳. Uses only trusted data: gather's PR number and
       # the github context. Nothing from the artifact. The job still fails.
-      #
-      # This step deliberately carries its own minimal copy of the upsert in
-      # scripts/upsert-comment.sh instead of calling it: it must work even when
-      # the checkout of our files is what failed. Keep the two in step,
-      # including the `.user.type == "Bot"` and `.user.login == $author` checks (a
-      # user can't be a Bot, and only our own identity's comment is edited).
       - name: Report comment workflow failure
         if: failure()
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          # Must match the identity of GH_TOKEN: empty app-slug (App not
-          # configured, or minting failed) means github.token is used.
-          COMMENT_AUTHOR: ${{ steps.app-token.outputs.app-slug && format('{0}[bot]', steps.app-token.outputs.app-slug) || 'github-actions[bot]' }}
           REPO: ${{ github.repository }}
           PULL_REQUEST: ${{ needs.gather.outputs.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          MARKER: "<!-- lexicon-actions:validation -->"
         run: |
-          set -euo pipefail
-          printf '%s\n\n%s\n\n%s\n' "## ‼️ Couldn't report validation results" \
-            "See the [comment workflow run]($RUN_URL) for details." "$MARKER" > "$RUNNER_TEMP/failure.txt"
-          comment_id="$(gh api --paginate "repos/$REPO/issues/$PULL_REQUEST/comments?per_page=100" \
-            | jq -rs --arg marker "$MARKER" --arg author "$COMMENT_AUTHOR" \
-              'add // [] | map(select(.user.type == "Bot" and .user.login == $author and ((.body // "") | contains($marker)))) | last | .id // empty')"
-          if [ -n "$comment_id" ]; then
-            gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$RUNNER_TEMP/failure.txt" >/dev/null
-          else
-            gh api --method POST "repos/$REPO/issues/$PULL_REQUEST/comments" -F "body=@$RUNNER_TEMP/failure.txt" >/dev/null
-          fi
+          gh pr comment "$PULL_REQUEST" --create-if-none --edit-last --repo "$REPO" \
+            --body "## ‼️ Couldn't report validation results"$'\n\n'"See the [comment workflow run]($RUN_URL) for details."

@@ -103,7 +103,6 @@ if custom pipelines turn out to be needed.
   action.yml          # internal composite action: pinned + verified goat (not a public interface)
   goat-checksums.txt  # pinned per-version SHA-256s, read via $GITHUB_ACTION_PATH
 scripts/format-comment.js
-scripts/upsert-comment.sh
 scripts/install-goat.sh
 README.md             # adopter guide (below)
 LICENSE               # MIT
@@ -280,13 +279,11 @@ The behaviour stays as it is in `germ-network/lexicon` today:
       must be `true`.
     - Formats the comment with `format-comment.js` and posts it.
     - Replaces the ⏳ with a failure comment if any step fails.
-    - Comment identity is a hidden marker, `<!-- lexicon-actions:validation -->`, ending
-      every body. `scripts/upsert-comment.sh` updates the last comment that is Bot-authored
-      (`.user.type == "Bot"`, so a user can't plant the marker) and contains it, or
-      creates one. The failure fallback keeps an inline copy so it works even if the
-      checkout failed. Optional `app-id` input and `app-private-key` secret: the two commenting
-      jobs mint a GitHub App token (`actions/create-github-app-token`, pull requests:
-      write only) and comment as `<app-name>[bot]`; otherwise they use `github.token`.
+    - Comments use `gh pr comment --create-if-none --edit-last`, so the most recent comment
+      by the posting identity is edited. By default that is `github-actions[bot]`, shared with
+      other `GITHUB_TOKEN` workflows. Optional `app-id` input and `app-private-key` secret:
+      the two commenting jobs mint a GitHub App token (`actions/create-github-app-token`,
+      pull requests: write only) and comment as `<app-name>[bot]`, which avoids clashes.
   - Cancelled runs are skipped. Concurrency is per job, keyed on head repo plus branch.
 - **publish**: installs goat and runs `goat lex publish -u` with `GOAT_USERNAME` (`did`) and
   `GOAT_PASSWORD` (`app-password`) in that step's environment. goat logs in in memory, so there

@@ -260,12 +260,13 @@ checked.
 
 ## Known limitations
 
-- Comments post as `github-actions[bot]` unless `app-id` and `app-private-key` are passed
-  to `comment.yml`. The workflow edits only its own comment: one that carries a hidden
-  marker, is authored by a bot, and was posted by the identity it is currently using.
-  It never touches other workflows' comments or a user's comment that copies the
-  marker. Switching identity (default to App, or back) starts a new comment; the old
-  one stays.
+- The comment workflow updates the most recent PR comment made by its posting identity
+  (`gh pr comment --edit-last`). With the default token that identity is
+  `github-actions[bot]`, shared with every other workflow that comments using
+  `GITHUB_TOKEN`. If other workflows in your repository also comment on pull requests
+  that way, they can overwrite each other's comments. To avoid that, set up a GitHub App
+  and pass `app-id` and `app-private-key` so lexicon-actions comments under its own
+  identity; see [the App setup steps](#commentyml).
 - Linux runners only (x86_64 and arm64).
 
 ## Maintainers: bumping goat
