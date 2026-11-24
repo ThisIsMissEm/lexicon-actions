@@ -1,6 +1,6 @@
 # keys
 
-`goat-release.asc` is the public key used by `scripts/pin-goat.sh` to verify goat release checksums. The action never reads it at runtime.
+`goat-release.asc` is the public key used by `scripts/pin-goat.sh` to verify goat release checksums. The action never reads it at runtime. The checksums it produces are pinned in `.github/actions/setup-goat/goat-checksums.txt`.
 
 | Item | Value |
 | --- | --- |

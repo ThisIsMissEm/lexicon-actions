@@ -172,21 +172,13 @@ No inputs. It reads everything it needs from the triggering event and the
 | `lexicons-dir` | string | `lexicons/` | Directory containing the lexicon JSON files. |
 | secret `app-password` | secret, required | | App password for the publishing account. |
 
-### `setup-goat` (root `action.yml`)
-
-| Input | Default | Description |
-| --- | --- | --- |
-| `goat-version` | `v0.2.9` | goat release tag to install, for example `v0.2.9`. It must be listed in `goat-checksums.txt` for the runner architecture. |
-
-| Output | Description |
-| --- | --- |
-| `goat-path` | Full path to the installed goat binary. |
+### `goat-version`
 
 `goat-version` must be a version listed in
-[`goat-checksums.txt`](goat-checksums.txt), so that file works as an allowlist:
-an unlisted version fails the job and the error names the supported ones. The
-`goat-version` input of the workflows is passed straight through, so the same
-rule applies.
+[`goat-checksums.txt`](.github/actions/setup-goat/goat-checksums.txt), so that file
+works as an allowlist: an unlisted version fails the job and the error names the
+supported ones. The `goat-version` input of the workflows is passed straight
+through, so the same rule applies.
 
 ## What blocks
 
@@ -221,7 +213,7 @@ sections that don't block as "not blocking".
   Add a `CODEOWNERS` entry for `.github/` and turn on "Require review from Code
   Owners" in your branch protection.
 - **goat is verified.** Each supported goat release has its SHA-256 pinned in
-  `goat-checksums.txt`. The action downloads the tarball for exactly the requested
+  `.github/actions/setup-goat/goat-checksums.txt`. The internal setup-goat action downloads the tarball for exactly the requested
   version, checks it against the pinned hash, and fails on any mismatch. There is
   no unverified fallback.
 - **Our own scripts match your pin.** The workflows fetch their scripts at the
@@ -247,32 +239,21 @@ checked.
   remain. Prefer GitHub-hosted runners.
 - Linux runners only (x86_64 and arm64).
 
-## Using setup-goat on its own
-
-The root action installs a pinned, verified goat and puts it on `PATH`:
-
-```yaml
-steps:
-  - uses: thisismissem/lexicon-actions@v1
-    with:
-      goat-version: v0.2.9
-  - run: goat lex lint lexicons/
-```
-
 ## Maintainers: bumping goat
 
-1. Run `scripts/pin-goat.sh vX.Y.Z` and append its output to `goat-checksums.txt`:
+1. Run `scripts/pin-goat.sh vX.Y.Z` and append its output to
+   `.github/actions/setup-goat/goat-checksums.txt`:
 
    ```sh
-   scripts/pin-goat.sh vX.Y.Z >> goat-checksums.txt
+   scripts/pin-goat.sh vX.Y.Z >> .github/actions/setup-goat/goat-checksums.txt
    ```
 
    The script downloads the release's checksums file and signature, and verifies
    the signature against bnewbold's signing subkey
    (`0C8E4A0DA8E9990872952B3B084425E080357D53`; see [`keys/README.md`](keys/README.md)).
    It prints lines only on success and never edits files itself.
-2. Update the default `goat-version` in `action.yml`, `validate.yml` and
-   `publish.yml`.
+2. Update the default `goat-version` in `.github/actions/setup-goat/action.yml`,
+   `.github/workflows/validate.yml` and `.github/workflows/publish.yml`.
 3. Re-check the DNS and breaking-change parsers against the new goat output.
 
 Bumping the default `goat-version` is a minor release.

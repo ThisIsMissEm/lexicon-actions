@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Maintainer tool: fetch a goat release's checksums, verify the GPG signature
 # against the pinned signing subkey, and print the lines to append to
-# goat-checksums.txt. Never used by the action at runtime; never edits repo files.
+# .github/actions/setup-goat/goat-checksums.txt. Never used by the action at runtime; never edits repo files.
 #
-# Usage: scripts/pin-goat.sh v0.2.10 >> goat-checksums.txt
+# Usage: scripts/pin-goat.sh v0.2.10 >> .github/actions/setup-goat/goat-checksums.txt
 set -euo pipefail
 
 SIGNING_FPR="0C8E4A0DA8E9990872952B3B084425E080357D53"

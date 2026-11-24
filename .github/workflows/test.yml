@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - uses: ./
+      - uses: ./.github/actions/setup-goat
         id: goat
       - name: Assert goat is installed
         env:
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./
+      - uses: ./.github/actions/setup-goat
         id: goat
         continue-on-error: true
         with:
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./
+      - uses: ./.github/actions/setup-goat
         id: goat
         continue-on-error: true
         with:
@@ -80,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Pin tool reproduces the committed v0.2.9 checksums
-        run: diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' goat-checksums.txt)
+        run: diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' .github/actions/setup-goat/goat-checksums.txt)
 
   actionlint:
     runs-on: ubuntu-latest

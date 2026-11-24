@@ -1,11 +1,10 @@
 name: Setup goat (atproto CLI)
 description: >-
-  Install a pinned, SHA-256-verified release of goat, the AT Protocol (Bluesky)
-  command-line tool, and add it to PATH. Linux x86_64 and arm64 runners only.
+  Internal action of lexicon-actions, not a supported public interface: its
+  inputs and outputs may change without a major version. Installs a pinned,
+  SHA-256-verified release of goat, the AT Protocol (Bluesky) command-line
+  tool, and adds it to PATH. Linux x86_64 and arm64 runners only.
 author: thisismissem
-branding:
-  icon: download
-  color: blue
 
 inputs:
   goat-version:

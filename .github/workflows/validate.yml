@@ -187,7 +187,7 @@ jobs:
           persist-credentials: false
 
       - name: Install goat
-        uses: ./.lexicon-actions
+        uses: ./.lexicon-actions/.github/actions/setup-goat
         with:
           goat-version: ${{ inputs.goat-version }}
 
