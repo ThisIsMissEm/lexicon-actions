@@ -1,0 +1,20 @@
+name: "Self-test: Validate lexicon"   # self-comment.yml references this name
+on:
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  lexicon:
+    uses: ./.github/workflows/validate.yml
+    with:
+      # Adopters use `${{ vars.LEXICON_DID }}`. The self-test uses a literal
+      # because this repo has no account and no repository variable to set.
+      did: did:plc:lexiconactionsselftest
+      lexicons-dir: test/lexicons
+      # The fixture NSID has no `_lexicon` DNS record, so this exercises the
+      # non-blocking wording.
+      fail-on-dns: false

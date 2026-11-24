@@ -1,0 +1,14 @@
+# Note: workflow_run only fires from the default branch, so this workflow can
+# only be exercised after it has been merged to main.
+name: "Self-test: Comment lexicon results"
+on:
+  workflow_run:
+    workflows: ["Self-test: Validate lexicon"]
+    types: [requested, completed]
+permissions: {}
+jobs:
+  comment:
+    uses: ./.github/workflows/comment.yml
+    permissions:
+      pull-requests: write
+      actions: read
