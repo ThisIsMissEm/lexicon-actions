@@ -93,20 +93,29 @@ jobs:
         run: |
           set -eo pipefail
           files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" \
-            --jq '.[] | {filename, status}' | jq -sc '.')"
+            --jq '.[] | {filename, status, previous_filename}' | jq -sc '.')"
 
           # Relevant: anything under the lexicons dir, or any workflow file
-          # (this includes the adopter's own caller file).
+          # (this includes the adopter's own caller file). A rename counts if
+          # either its new or its previous path matches, so moving a lexicon
+          # out of the directory is still validated.
           if jq -e --arg dir "$LEXICONS_DIR" \
-            'any(.[].filename; startswith($dir) or startswith(".github/workflows/"))' \
+            'any(.[] | .filename, (.previous_filename // empty); startswith($dir) or startswith(".github/workflows/"))' \
             <<<"$files" >/dev/null; then
             echo "lexicons=true" >> "$GITHUB_OUTPUT"
           else
             echo "lexicons=false" >> "$GITHUB_OUTPUT"
           fi
+          # Lexicon files are .json files under the lexicons dir. A rename out
+          # of that set is reported as the removal of its previous path.
           # `jq -c` keeps this on one line, even if a filename contains a newline.
           echo "lexicon-files=$(jq -c --arg dir "$LEXICONS_DIR" \
-            '[.[] | select(.filename | startswith($dir) and endswith(".json"))]' <<<"$files")" >> "$GITHUB_OUTPUT"
+            'def lex: startswith($dir) and endswith(".json");
+             [.[] | (
+               if .status == "renamed" and ((.previous_filename // "") | lex) and ((.filename | lex) | not)
+               then {filename: .previous_filename, status: "removed"}
+               else empty end
+             ), select(.filename | lex)]' <<<"$files")" >> "$GITHUB_OUTPUT"
 
       - name: Record skipped run for comment workflow
         if: steps.diff.outputs.lexicons == 'false'
