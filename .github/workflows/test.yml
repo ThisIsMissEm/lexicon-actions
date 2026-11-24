@@ -64,6 +64,15 @@ jobs:
           OUTCOME: ${{ steps.goat.outcome }}
         run: test "$OUTCOME" = "failure"
 
+  pin-goat:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Pin tool reproduces the committed v0.2.9 checksums
+        run: diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' goat-checksums.txt)
+
   actionlint:
     runs-on: ubuntu-latest
     env:
