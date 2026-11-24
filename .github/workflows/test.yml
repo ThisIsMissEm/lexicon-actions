@@ -18,6 +18,52 @@ jobs:
           node-version: "24.x"
       - run: node --test "test/**/*.test.js"
 
+  setup-goat:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./
+        id: goat
+      - name: Assert goat is installed
+        env:
+          GOAT_PATH: ${{ steps.goat.outputs.goat-path }}
+        run: |
+          test -x "$GOAT_PATH"
+          goat -v | tee goat-version.txt
+          grep -F "0.2.9" goat-version.txt
+
+  setup-goat-bad-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./
+        id: goat
+        continue-on-error: true
+        with:
+          goat-version: "v0.2.9; echo pwned"
+      - name: Assert the install failed
+        env:
+          OUTCOME: ${{ steps.goat.outcome }}
+        run: test "$OUTCOME" = "failure"
+
+  setup-goat-unpinned:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./
+        id: goat
+        continue-on-error: true
+        with:
+          goat-version: v0.2.8
+      - name: Assert the install failed
+        env:
+          OUTCOME: ${{ steps.goat.outcome }}
+        run: test "$OUTCOME" = "failure"
+
   actionlint:
     runs-on: ubuntu-latest
     env:

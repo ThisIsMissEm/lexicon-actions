@@ -1,0 +1,6 @@
+# Pinned SHA-256 checksums for goat release tarballs (goat_Linux_<arch>.tar.gz).
+# Format: <version> <arch> <sha256>
+# Values come from the GPG-verified upstream goat_<ver>_checksums.txt.
+# See the README for the procedure to bump or add a version.
+v0.2.9 x86_64 e16a5f29772f9420ac86f6e5c964a328882b5abbcc2d50bd7677acb1f9cf9f1d
+v0.2.9 arm64 eef68d6c4d792b49323149adc1a33a8ab6f5c1b84f9786d3874fb0c05e12808d

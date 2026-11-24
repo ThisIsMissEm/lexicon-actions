@@ -1,0 +1,89 @@
+name: Setup goat (atproto CLI)
+description: >-
+  Install a pinned, SHA-256-verified release of goat, the AT Protocol (Bluesky)
+  command-line tool, and add it to PATH. Linux x86_64 and arm64 runners only.
+author: thisismissem
+branding:
+  icon: download
+  color: blue
+
+inputs:
+  goat-version:
+    description: >-
+      goat release tag to install, for example v0.2.9. It must be listed in
+      goat-checksums.txt for the runner architecture.
+    required: false
+    default: v0.2.9
+
+outputs:
+  goat-path:
+    description: Full path to the installed goat binary.
+    value: ${{ steps.install.outputs.goat-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install goat
+      id: install
+      shell: bash
+      env:
+        GOAT_VERSION: ${{ inputs.goat-version }}
+        RUNNER_OS_NAME: ${{ runner.os }}
+        RUNNER_ARCH_NAME: ${{ runner.arch }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+
+        # Validate before any other use of the version.
+        if [[ ! "$GOAT_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::goat-version must match ^v[0-9]+\.[0-9]+\.[0-9]+$ (for example v0.2.9)"
+          exit 1
+        fi
+
+        if [[ "$RUNNER_OS_NAME" != "Linux" ]]; then
+          echo "::error::setup-goat supports Linux runners only"
+          exit 1
+        fi
+
+        case "$RUNNER_ARCH_NAME" in
+          X64) arch="x86_64" ;;
+          ARM64) arch="arm64" ;;
+          *)
+            echo "::error::setup-goat supports X64 and ARM64 runners only"
+            exit 1
+            ;;
+        esac
+
+        # Look up the pinned hash: lines of "<version> <arch> <sha256>".
+        table="$ACTION_PATH/goat-checksums.txt"
+        expected=""
+        supported=()
+        while read -r v a s _; do
+          [[ -z "${v:-}" || "$v" == \#* ]] && continue
+          if [[ "$a" == "$arch" ]]; then
+            supported+=("$v")
+            if [[ "$v" == "$GOAT_VERSION" ]]; then
+              expected="$s"
+            fi
+          fi
+        done < "$table"
+
+        if [[ -z "$expected" ]]; then
+          echo "::error::goat $GOAT_VERSION ($arch) isn't in goat-checksums.txt. Supported: ${supported[*]:-none}"
+          exit 1
+        fi
+
+        asset="goat_Linux_${arch}.tar.gz"
+        url="https://github.com/bluesky-social/goat/releases/download/${GOAT_VERSION}/${asset}"
+        work="$(mktemp -d)"
+        curl -fsSL -o "$work/$asset" "$url"
+        (cd "$work" && printf '%s  %s\n' "$expected" "$asset" | sha256sum --check --strict -)
+
+        bindir="$RUNNER_TEMP/goat-bin"
+        mkdir -p "$bindir"
+        tar -xzf "$work/$asset" -C "$bindir" goat
+        chmod +x "$bindir/goat"
+        rm -rf "$work"
+
+        echo "$bindir" >> "$GITHUB_PATH"
+        echo "goat-path=$bindir/goat" >> "$GITHUB_OUTPUT"
