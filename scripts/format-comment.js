@@ -37,6 +37,9 @@ function prose(value) {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/`/g, "")
+    // `&` first, so entities like "&#64;" can't reform an "@" mention. Nothing
+    // below produces an "&", so this can't be double-escaped.
+    .replace(/&/g, "&amp;")
     .replace(/[\\*_[\]<>!#|~]/g, "\\$&")
     .replace(/@/g, "@​");
 }
@@ -125,7 +128,11 @@ function parseStatus(text) {
     if (!line.trim()) continue;
 
     const match = STATUS_LINE.exec(line);
-    const status = match && STATUS_BY_ICON[match[1]];
+    // hasOwn: an icon like "constructor" must not resolve via the prototype.
+    const status =
+      match && Object.hasOwn(STATUS_BY_ICON, match[1])
+        ? STATUS_BY_ICON[match[1]]
+        : undefined;
     if (!status || !NSID_PATTERN.test(match[2])) return null;
 
     statuses.set(match[2], status);
@@ -336,7 +343,7 @@ async function formatComment({ logsDir, validated }) {
         ? "## ‼️ Incompatible Changes"
         : notBlocking
           ? "## 🟡 Incompatible Changes (not blocking)"
-          : "## 🟡 Incompatible Changes",
+          : "## 🟡 Incompatible Changes (blocking)",
     );
     if (notBlocking) {
       output.push(

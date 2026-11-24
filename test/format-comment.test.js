@@ -95,9 +95,9 @@ test("breaking error renders Incompatible Changes", async (t) => {
   assert.match(out, /\* `com\.example\.foo`: property removed/);
 });
 
-test("breaking warning only, blocking, renders the yellow heading", async (t) => {
+test("breaking warning only, blocking, renders the yellow blocking heading", async (t) => {
   const out = await render(t, { "breaking.json": [breakIssue("warn")] });
-  assert.match(out, /## 🟡 Incompatible Changes\n/);
+  assert.match(out, /## 🟡 Incompatible Changes \(blocking\)\n/);
   assert.doesNotMatch(out, /not blocking/);
 });
 
@@ -307,6 +307,22 @@ test("lint text cannot inject sections, mentions or links", async (t) => {
   assert.ok(out.includes("@​octocat"));
   assert.ok(!out.includes("[x]("));
   assert.ok(out.includes("\\[x\\]"));
+});
+
+test("entities cannot reform a mention", async (t) => {
+  const out = await render(t, {
+    "lint.json": [{ ...lintIssue("error"), "lint-description": "a &#64;octocat &amp; b" }],
+  });
+  assert.ok(out.includes("a &amp;\\#64;octocat &amp;amp; b"));
+  assert.ok(!out.includes("&#64;"));
+});
+
+test("a status icon naming a prototype property is not a status", async (t) => {
+  const out = await render(t, {
+    "lexicon-changes.json": { nsids: ["com.example.foo"], removed: [] },
+    "status.txt": " constructor com.example.foo\n",
+  });
+  assert.ok(out.includes("Couldn't determine the publish status"));
 });
 
 test("lint file-path and nsid are flattened inside the code span", async (t) => {
