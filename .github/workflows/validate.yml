@@ -36,7 +36,7 @@ permissions: {}
 
 jobs:
   # Decides whether the lexicon checks need to run. When nothing relevant
-  # changed, it uploads a `check-logs` artifact marked `skipped` so the comment
+  # changed, it uploads a `lexicon-check-logs` artifact marked `skipped` so the comment
   # workflow can report that instead of an incomplete run.
   detect-changes:
     runs-on: ubuntu-latest
@@ -133,22 +133,23 @@ jobs:
           BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
           BLOCK_DNS: ${{ inputs.fail-on-dns }}
           LEXICONS_DIR: ${{ steps.dir.outputs.dir }}
+          LOGS_DIR: ${{ runner.temp }}/check-logs
         run: |
-          rm -rf logs && mkdir -p logs
+          rm -rf "$LOGS_DIR" && mkdir -p "$LOGS_DIR"
           jq -n \
             --argjson pr "$PR_NUMBER" \
             --argjson bw "$BLOCK_BREAKING_WARNINGS" \
             --argjson dns "$BLOCK_DNS" \
             --arg dir "$LEXICONS_DIR" \
             '{pr: $pr, finished: true, skipped: true, blocking: {"breaking-warnings": $bw, dns: $dns}, "lexicons-dir": $dir}' \
-            > logs/meta.json
+            > "$LOGS_DIR/meta.json"
 
       - name: Upload skipped-run metadata
         if: steps.diff.outputs.lexicons == 'false'
         uses: actions/upload-artifact@v6
         with:
-          name: check-logs
-          path: logs
+          name: lexicon-check-logs
+          path: ${{ runner.temp }}/check-logs
 
   validate-changes:
     runs-on: ubuntu-latest
@@ -197,9 +198,13 @@ jobs:
       - name: Print goat version
         run: goat -v
 
-      # Start from an empty dir: a `logs/` committed in the PR must not
-      # contribute files to the artifact.
-      - run: rm -rf logs && mkdir -p logs
+      # Logs live outside the workspace, in the runner temp directory, so
+      # nothing committed in the PR can contribute files to the artifact.
+      # LOGS_DIR is exported for all later steps.
+      - name: Prepare logs directory
+        run: |
+          echo "LOGS_DIR=$RUNNER_TEMP/check-logs" >> "$GITHUB_ENV"
+          rm -rf "$RUNNER_TEMP/check-logs" && mkdir -p "$RUNNER_TEMP/check-logs"
 
       # Each check records goat's exit code instead of failing the step. With
       # `pipefail` the pipeline status is the last non-zero exit (goat's, or
@@ -210,23 +215,23 @@ jobs:
         id: lint
         run: |
           set -o pipefail
-          goat lex lint --json | jq --slurp > logs/lint.json || echo "$?" > logs/lint-exit-code
+          goat lex lint --json | jq --slurp > "$LOGS_DIR/lint.json" || echo "$?" > "$LOGS_DIR/lint-exit-code"
 
       - name: Check lexicon files for breaking changes
         id: breaking
         run: |
           set -o pipefail
-          goat lex breaking --json | jq --slurp > logs/breaking.json || echo "$?" > logs/breaking-exit-code
+          goat lex breaking --json | jq --slurp > "$LOGS_DIR/breaking.json" || echo "$?" > "$LOGS_DIR/breaking-exit-code"
 
       # goat exits 0 even when records are missing, so the output is what
-      # matters; report-failures.js reads logs/check-dns.txt.
+      # matters; report-failures.js reads check-dns.txt.
       - name: Check for dns records for lexicon
         id: dns
         env:
           DID: ${{ inputs.did }}
         run: |
           set -o pipefail
-          goat lex check-dns --example-did="$DID" | tee logs/check-dns.txt || echo "$?" > logs/check-dns-exit-code
+          goat lex check-dns --example-did="$DID" | tee "$LOGS_DIR/check-dns.txt" || echo "$?" > "$LOGS_DIR/check-dns-exit-code"
 
       # Informational only: never blocks. `goat lex status` has no JSON output,
       # so the raw text is saved and the comment script parses it. Given
@@ -247,12 +252,12 @@ jobs:
           nsids='[]'
           if [ "${#files[@]}" -gt 0 ]; then
             nsids="$(jq -s '[.[].id]' "${files[@]}")"
-            goat lex status "${files[@]}" | tee logs/status.txt
+            goat lex status "${files[@]}" | tee "$LOGS_DIR/status.txt"
           fi
 
           jq -n --argjson nsids "$nsids" --argjson files "$LEXICON_FILES" \
             '{nsids: $nsids, removed: [$files[] | select(.status == "removed") | .filename]}' \
-            > logs/lexicon-changes.json
+            > "$LOGS_DIR/lexicon-changes.json"
 
       # Hand the PR number, completion flag and blocking settings to the
       # privileged comment workflow via the artifact. This workflow runs
@@ -266,7 +271,7 @@ jobs:
           BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
           BLOCK_DNS: ${{ inputs.fail-on-dns }}
         run: |
-          mkdir -p logs
+          mkdir -p "$LOGS_DIR"
           jq -n \
             --argjson pr "$PR_NUMBER" \
             --argjson finished "$FINISHED" \
@@ -274,14 +279,14 @@ jobs:
             --argjson dns "$BLOCK_DNS" \
             --arg dir "$LEXICONS_DIR" \
             '{pr: $pr, finished: $finished, blocking: {"breaking-warnings": $bw, dns: $dns}, "lexicons-dir": $dir}' \
-            > logs/meta.json
+            > "$LOGS_DIR/meta.json"
 
       - name: Upload check results
         if: success() || failure()
         uses: actions/upload-artifact@v6
         with:
-          name: check-logs
-          path: logs
+          name: lexicon-check-logs
+          path: ${{ runner.temp }}/check-logs
 
       # Last step: emits one ::error annotation per blocking failure and exits
       # non-zero if anything blocks.
@@ -289,4 +294,4 @@ jobs:
         env:
           BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
           BLOCK_DNS: ${{ inputs.fail-on-dns }}
-        run: node .lexicon-actions/scripts/report-failures.js logs
+        run: node .lexicon-actions/scripts/report-failures.js "$LOGS_DIR"

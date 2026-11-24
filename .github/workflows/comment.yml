@@ -17,7 +17,7 @@ name: Comment lexicon results (reusable)
 # No code from the pull request runs here, and the adopter's repository is never
 # checked out. The only checkout is this repository's own scripts, pinned to the
 # commit the caller referenced. The pull request is looked up from trusted event
-# data via the API; the `check-logs` artifact produced by the PR run is treated
+# data via the API; the `lexicon-check-logs` artifact produced by the PR run is treated
 # as untrusted data.
 #
 # Jobs:
@@ -140,7 +140,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v7
         with:
-          name: check-logs
+          name: lexicon-check-logs
           path: ${{ runner.temp }}/check-logs
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
@@ -164,7 +164,7 @@ jobs:
           LOGS_DIR: ${{ runner.temp }}/check-logs
         run: |
           if [ "$DOWNLOAD_OUTCOME" != "success" ]; then
-            echo "::warning::The check-logs artifact was unavailable; reporting the run as incomplete."
+            echo "::warning::The lexicon-check-logs artifact was unavailable; reporting the run as incomplete."
             echo "validated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
