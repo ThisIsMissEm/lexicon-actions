@@ -165,15 +165,15 @@ It reads everything it needs from the triggering event and the
 
 | Input | Type | Default | Description |
 | --- | --- | --- | --- |
-| `app-id` | string | `""` | ID of a GitHub App to post the comment as. When empty, comments post as `github-actions[bot]`. |
-| secret `app-private-key` | secret, optional | | Private key of that App. Required when `app-id` is set. |
+| `client-id` | string | `""` | Client ID (`Iv…`) of a GitHub App to post the comment as. When empty, comments post as `github-actions[bot]`. |
+| secret `app-private-key` | secret, optional | | Private key of that App. Required when `client-id` is set. |
 
 To comment as your own App:
 
 1. Create a GitHub App with the repository permission Pull requests: Read & write,
    and install it on the repository.
-2. Store its App ID as a variable (`LEXICON_APP_ID`) and a generated private key as
-   a secret (`LEXICON_APP_KEY`).
+2. Copy the **Client ID** from the App's settings page (not the numeric App ID) and store it as a variable (`LEXICON_APP_CLIENT_ID`). Store a generated private key
+   as a secret (`LEXICON_APP_KEY`).
 3. Pass them from the comment caller:
 
    ```yaml
@@ -184,7 +184,7 @@ To comment as your own App:
          pull-requests: write
          actions: read
        with:
-         app-id: ${{ vars.LEXICON_APP_ID }}
+         client-id: ${{ vars.LEXICON_APP_CLIENT_ID }}
        secrets:
          app-private-key: ${{ secrets.LEXICON_APP_KEY }}
    ```
@@ -260,7 +260,7 @@ checked.
 
 ## Known limitations
 
-- Comments post as `github-actions[bot]` unless `app-id` and `app-private-key` are passed
+- Comments post as `github-actions[bot]` unless `client-id` and `app-private-key` are passed
   to `comment.yml`. The workflow finds its own comment by a hidden marker in the body,
   and only edits comments authored by a bot, so it won't touch other workflows'
   comments or a user's comment that copies the marker.

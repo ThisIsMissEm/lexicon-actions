@@ -7,3 +7,11 @@ paths:
   .github/workflows/**/*.{yml,yaml}:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  # actionlint's bundled metadata for actions/create-github-app-token@v3 predates
+  # the `client-id` input (v3 deprecates `app-id` in its favour and makes neither
+  # required; verified against the action.yml at the v3 tag on 2026-11-24).
+  # Remove these once actionlint's popular-actions data is updated.
+  .github/workflows/comment.yml:
+    ignore:
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'

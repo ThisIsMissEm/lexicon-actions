@@ -19,7 +19,7 @@
 - C: setup-goat is internal, at `.github/actions/setup-goat/` (with the checksums); no root action, no Marketplace.
 - D: publish uses an ephemeral in-memory login (`GOAT_USERNAME`/`GOAT_PASSWORD` on `goat lex publish`); no login, check-auth or logout steps.
 - E: the goat install logic lives in `scripts/install-goat.sh`; the action just calls it.
-- F: `comment.yml` takes an optional `app-id` input and `app-private-key` secret and mints a GitHub App token (pull requests: write) for commenting; the optional `github-token` secret was dropped.
+- F: `comment.yml` takes an optional `client-id` input and `app-private-key` secret and mints a GitHub App token (pull requests: write) for commenting; the optional `github-token` secret was dropped.
 
 ## Global Constraints
 
