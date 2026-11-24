@@ -26,7 +26,7 @@ name: Comment lexicon results (reusable)
 #
 # Comment identity: every comment carries a hidden marker line, and
 # scripts/upsert-comment.sh updates the last Bot-authored comment containing it
-# (or creates one). When `client-id` is set, the two commenting jobs mint a
+# (or creates one). When `app-id` is set, the two commenting jobs mint a
 # short-lived GitHub App token (pull requests: write only) and the steps that
 # write comments use it; `gather` and the artifact download use github.token.
 # - publish:     on `completed`, posts the results from the artifact, or a
@@ -40,9 +40,9 @@ name: Comment lexicon results (reusable)
 on:
   workflow_call:
     inputs:
-      client-id:
+      app-id:
         description: >-
-          Client ID (Iv…) of a GitHub App to post the comment as. Needs the
+          ID of a GitHub App to post the comment as. Needs the
           `app-private-key` secret. When empty, comments are posted as
           github-actions[bot] using the workflow's GITHUB_TOKEN.
         type: string
@@ -50,7 +50,7 @@ on:
     secrets:
       app-private-key:
         description: >-
-          Private key of the GitHub App named by `client-id`. The App needs
+          Private key of the GitHub App named by `app-id`. The App needs
           Pull requests: Read & write, installed on this repository.
         required: false
 
@@ -128,10 +128,13 @@ jobs:
       # github.token.
       - name: Create GitHub App token
         id: app-token
-        if: inputs.client-id != ''
+        if: inputs.app-id != ''
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ inputs.client-id }}
+          # v3 marks `app-id` as deprecated in favour of `client-id`, but we keep
+          # `app-id` as our public input by owner decision. If the upstream
+          # action drops it, map our input internally.
+          app-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.app-private-key }}
           permission-pull-requests: write
 
@@ -179,10 +182,13 @@ jobs:
       # github.token.
       - name: Create GitHub App token
         id: app-token
-        if: inputs.client-id != ''
+        if: inputs.app-id != ''
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ inputs.client-id }}
+          # v3 marks `app-id` as deprecated in favour of `client-id`, but we keep
+          # `app-id` as our public input by owner decision. If the upstream
+          # action drops it, map our input internally.
+          app-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.app-private-key }}
           permission-pull-requests: write
 
