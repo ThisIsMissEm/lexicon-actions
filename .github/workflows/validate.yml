@@ -1,0 +1,300 @@
+name: Validate lexicon (reusable)
+
+# Reusable workflow. The caller owns the trigger (`on: pull_request`, with no
+# `paths` filter) and the concurrency group. Keeping the trigger path-free lets
+# `detect-changes` and `validate-changes` be required status checks: a workflow
+# that never starts leaves a required check pending forever, but a job skipped
+# by `if:` counts as passed. Check names are `<caller job id> / <job id>`, so
+# the job ids below are a public contract.
+on:
+  workflow_call:
+    inputs:
+      did:
+        description: >-
+          DID of the account that publishes the lexicons. Passed to
+          `goat lex check-dns --example-did`.
+        type: string
+        required: true
+      goat-version:
+        description: goat release tag to install.
+        type: string
+        default: v0.2.9
+      lexicons-dir:
+        description: Directory containing the lexicon JSON files.
+        type: string
+        default: lexicons/
+      fail-on-breaking-warnings:
+        description: Whether warn-level breaking changes fail validate-changes.
+        type: boolean
+        default: true
+      fail-on-dns:
+        description: Whether DNS failures fail validate-changes.
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  # Decides whether the lexicon checks need to run. When nothing relevant
+  # changed, it uploads a `lexicon-check-logs` artifact marked `skipped` so the comment
+  # workflow can report that instead of an incomplete run.
+  detect-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      lexicons: ${{ steps.diff.outputs.lexicons }}
+      # JSON array of {filename, status} for the PR's lexicon .json files.
+      lexicon-files: ${{ steps.diff.outputs.lexicon-files }}
+      # Validated, normalized `lexicons-dir` (no leading "./", trailing "/").
+      lexicons-dir: ${{ steps.dir.outputs.dir }}
+    steps:
+      # Same rules as normalizeLexiconsDir in scripts/lib/results.js, but this
+      # one rejects instead of falling back: the value reaches jq and goat.
+      - name: Validate lexicons-dir
+        id: dir
+        env:
+          INPUT_DIR: ${{ inputs.lexicons-dir }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Invalid lexicons-dir::lexicons-dir must be a relative path of [A-Za-z0-9._/-] with no '..' segment and no segment starting with '-'."
+            exit 1
+          }
+
+          dir="$INPUT_DIR"
+          [[ -n "$dir" ]] || fail
+          [[ "$dir" =~ ^[A-Za-z0-9._/-]+$ ]] || fail
+          [[ "$dir" != /* ]] || fail
+
+          IFS=/ read -r -a parts <<<"$dir"
+          segs=()
+          for seg in "${parts[@]}"; do
+            if [[ -z "$seg" || "$seg" == "." ]]; then
+              continue
+            fi
+            [[ "$seg" != ".." ]] || fail
+            [[ "$seg" != -* ]] || fail
+            segs+=("$seg")
+          done
+          [[ "${#segs[@]}" -gt 0 ]] || fail
+
+          norm="$(IFS=/; echo "${segs[*]}")/"
+          echo "dir=$norm" >> "$GITHUB_OUTPUT"
+
+      - name: Check for lexicon changes
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LEXICONS_DIR: ${{ steps.dir.outputs.dir }}
+        run: |
+          set -eo pipefail
+          files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" \
+            --jq '.[] | {filename, status, previous_filename}' | jq -sc '.')"
+
+          # Relevant: anything under the lexicons dir, or any workflow file
+          # (this includes the adopter's own caller file). A rename counts if
+          # either its new or its previous path matches, so moving a lexicon
+          # out of the directory is still validated.
+          # The files API returns at most 3000 files. At that size the list may
+          # be truncated and could hide a lexicon change, so run the checks
+          # anyway. Lint, breaking and DNS cover the whole directory, so only
+          # the informational lexicon-files list can be incomplete.
+          count="$(jq 'length' <<<"$files")"
+          if [ "$count" -ge 3000 ]; then
+            echo "::warning title=Large pull request::This pull request changes $count or more files (the GitHub API lists at most 3000), so the lexicon checks always run. The list of changed lexicons in the comment may be incomplete."
+            echo "lexicons=true" >> "$GITHUB_OUTPUT"
+          elif jq -e --arg dir "$LEXICONS_DIR" \
+            'any(.[] | .filename, (.previous_filename // empty); startswith($dir) or startswith(".github/workflows/"))' \
+            <<<"$files" >/dev/null; then
+            echo "lexicons=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "lexicons=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Lexicon files are .json files under the lexicons dir. A rename out
+          # of that set is reported as the removal of its previous path.
+          # `jq -c` keeps this on one line, even if a filename contains a newline.
+          echo "lexicon-files=$(jq -c --arg dir "$LEXICONS_DIR" \
+            'def lex: startswith($dir) and endswith(".json");
+             [.[] | (
+               if .status == "renamed" and ((.previous_filename // "") | lex) and ((.filename | lex) | not)
+               then {filename: .previous_filename, status: "removed"}
+               else empty end
+             ), select(.filename | lex)]' <<<"$files")" >> "$GITHUB_OUTPUT"
+
+      - name: Record skipped run for comment workflow
+        if: steps.diff.outputs.lexicons == 'false'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
+          BLOCK_DNS: ${{ inputs.fail-on-dns }}
+          LEXICONS_DIR: ${{ steps.dir.outputs.dir }}
+          LOGS_DIR: ${{ runner.temp }}/check-logs
+        run: |
+          rm -rf "$LOGS_DIR" && mkdir -p "$LOGS_DIR"
+          jq -n \
+            --argjson pr "$PR_NUMBER" \
+            --argjson bw "$BLOCK_BREAKING_WARNINGS" \
+            --argjson dns "$BLOCK_DNS" \
+            --arg dir "$LEXICONS_DIR" \
+            '{pr: $pr, finished: true, skipped: true, blocking: {"breaking-warnings": $bw, dns: $dns}, "lexicons-dir": $dir}' \
+            > "$LOGS_DIR/meta.json"
+
+      - name: Upload skipped-run metadata
+        if: steps.diff.outputs.lexicons == 'false'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: lexicon-check-logs
+          path: ${{ runner.temp }}/check-logs
+
+  validate-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lexicons == 'true'
+    permissions:
+      contents: read
+    env:
+      # goat reads the lexicons directory from this variable, never from argv.
+      LEXICONS_DIR: ${{ needs.detect-changes.outputs.lexicons-dir }}
+    steps:
+      - name: Require did input
+        env:
+          DID: ${{ inputs.did }}
+        run: |
+          if [[ -z "$DID" ]]; then
+            echo "::error title=Missing did::did input is empty. Set the LEXICON_DID repository variable. Fork pull requests may not receive repository variables."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Must come after the caller checkout, which cleans the workspace. Fetches
+      # this workflow's own repo at the exact commit the caller resolved.
+      - name: Checkout lexicon-actions
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .lexicon-actions
+          persist-credentials: false
+
+      - name: Install goat
+        uses: ./.lexicon-actions/.github/actions/setup-goat # zizmor: ignore[self-repository] intentional: the action comes from the pinned checkout of this repo at job.workflow_sha, a different path than the caller's workspace root
+        with:
+          goat-version: ${{ inputs.goat-version }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.x"
+
+      - name: Print goat version
+        run: goat -v
+
+      # Logs live outside the workspace, in the runner temp directory, so
+      # nothing committed in the PR can contribute files to the artifact.
+      # LOGS_DIR is exported for all later steps.
+      - name: Prepare logs directory
+        run: |
+          echo "LOGS_DIR=$RUNNER_TEMP/check-logs" >> "$GITHUB_ENV"
+          rm -rf "$RUNNER_TEMP/check-logs" && mkdir -p "$RUNNER_TEMP/check-logs"
+
+      # Each check records goat's exit code instead of failing the step. With
+      # `pipefail` the pipeline status is the last non-zero exit (goat's, or
+      # jq's), and `$?` after `||` is that pipeline's status. The exit-code
+      # file exists only on a non-zero exit; report-failures.js decides what
+      # blocks. Structured JSON on stdout; stderr log lines go to the step log.
+      - name: Lint lexicon files
+        id: lint
+        run: |
+          set -o pipefail
+          goat lex lint --json | jq --slurp > "$LOGS_DIR/lint.json" || echo "$?" > "$LOGS_DIR/lint-exit-code"
+
+      - name: Check lexicon files for breaking changes
+        id: breaking
+        run: |
+          set -o pipefail
+          goat lex breaking --json | jq --slurp > "$LOGS_DIR/breaking.json" || echo "$?" > "$LOGS_DIR/breaking-exit-code"
+
+      # goat exits 0 even when records are missing, so the output is what
+      # matters; report-failures.js reads check-dns.txt.
+      - name: Check for dns records for lexicon
+        id: dns
+        env:
+          DID: ${{ inputs.did }}
+        run: |
+          set -o pipefail
+          goat lex check-dns --example-did="$DID" | tee "$LOGS_DIR/check-dns.txt" || echo "$?" > "$LOGS_DIR/check-dns-exit-code"
+
+      # Informational only: never blocks. `goat lex status` has no JSON output,
+      # so the raw text is saved and the comment script parses it. Given
+      # specific files, goat still lists other published lexicons in the same
+      # group (as remote-only), so we also record which NSIDs this PR touched
+      # for the comment script to filter on.
+      - name: Check publish status of changed lexicons
+        id: status
+        continue-on-error: true
+        env:
+          LEXICON_FILES: ${{ needs.detect-changes.outputs.lexicon-files }}
+        run: |
+          set -eo pipefail
+          # NUL-delimited so unusual filenames survive intact. Each is prefixed
+          # with "./" so goat can never parse one as a flag.
+          mapfile -d '' files < <(jq -j '.[] | select(.status != "removed") | "./" + .filename + "\u0000"' <<<"$LEXICON_FILES")
+
+          nsids='[]'
+          if [ "${#files[@]}" -gt 0 ]; then
+            nsids="$(jq -s '[.[].id]' "${files[@]}")"
+            goat lex status "${files[@]}" | tee "$LOGS_DIR/status.txt"
+          fi
+
+          jq -n --argjson nsids "$nsids" --argjson files "$LEXICON_FILES" \
+            '{nsids: $nsids, removed: [$files[] | select(.status == "removed") | .filename]}' \
+            > "$LOGS_DIR/lexicon-changes.json"
+
+      # Hand the PR number, completion flag and blocking settings to the
+      # privileged comment workflow via the artifact. This workflow runs
+      # without a write token, so it cannot comment on the pull request itself.
+      # `finished` is true only when the lint, breaking and DNS steps all ran.
+      - name: Record metadata for comment workflow
+        if: success() || failure()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          FINISHED: ${{ steps.lint.outcome == 'success' && steps.breaking.outcome == 'success' && steps.dns.outcome == 'success' }}
+          BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
+          BLOCK_DNS: ${{ inputs.fail-on-dns }}
+        run: |
+          # Not LOGS_DIR from GITHUB_ENV: an earlier step may have failed
+          # before it was exported.
+          LOGS_DIR="$RUNNER_TEMP/check-logs"
+          mkdir -p "$LOGS_DIR"
+          jq -n \
+            --argjson pr "$PR_NUMBER" \
+            --argjson finished "$FINISHED" \
+            --argjson bw "$BLOCK_BREAKING_WARNINGS" \
+            --argjson dns "$BLOCK_DNS" \
+            --arg dir "$LEXICONS_DIR" \
+            '{pr: $pr, finished: $finished, blocking: {"breaking-warnings": $bw, dns: $dns}, "lexicons-dir": $dir}' \
+            > "$LOGS_DIR/meta.json"
+
+      - name: Upload check results
+        if: success() || failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: lexicon-check-logs
+          path: ${{ runner.temp }}/check-logs
+
+      # Last step: emits one ::error annotation per blocking failure and exits
+      # non-zero if anything blocks.
+      - name: Report on failures
+        env:
+          BLOCK_BREAKING_WARNINGS: ${{ inputs.fail-on-breaking-warnings }}
+          BLOCK_DNS: ${{ inputs.fail-on-dns }}
+        run: node .lexicon-actions/scripts/report-failures.js "$RUNNER_TEMP/check-logs"

@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/suzuki-shunsuke/pinact/v5.0.2/json-schema/pinact.json
+version: 3
+files:
+  - pattern: .github/workflows/*.yml
+  - pattern: .github/workflows/*.yaml
+  - pattern: .github/actions/*/action.yml
+  - pattern: .github/actions/*/action.yaml
+
+ignore_actions:
+  # Container actions are pinned by image digest (docker://image@sha256:...),
+  # which pinact can't resolve or rewrite. They are already immutable.
+  - name: docker://.*
+    ref: "sha256:[0-9a-f]{64}"

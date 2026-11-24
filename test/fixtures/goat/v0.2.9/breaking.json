@@ -1,0 +1,12 @@
+[
+  {
+    "nsid": "com.example.foo",
+    "lint-level": "error",
+    "message": "required property added: \"title\""
+  },
+  {
+    "nsid": "com.example.bar",
+    "lint-level": "warn",
+    "message": "property removed: \"legacy\""
+  }
+]

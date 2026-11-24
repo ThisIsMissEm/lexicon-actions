@@ -1,0 +1,14 @@
+# Note: workflow_run only fires from the default branch, so this workflow can
+# only be exercised after it has been merged to main.
+name: "Self-test: Comment lexicon results"
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] intentional: comment.yml never checks out or runs PR code; its security model is documented in its header
+    workflows: ["Self-test: Validate lexicon"]
+    types: [requested, completed]
+permissions: {}
+jobs:
+  comment:
+    uses: ./.github/workflows/comment.yml # zizmor: ignore[self-repository] actionlint 1.7.12 rejects the `$/` syntax
+    permissions:
+      pull-requests: write
+      actions: read

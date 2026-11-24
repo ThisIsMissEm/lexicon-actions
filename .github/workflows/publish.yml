@@ -1,0 +1,119 @@
+name: Publish lexicon (reusable)
+
+# Reusable workflow. The caller owns the trigger (`on: push` to the default
+# branch, usually with `paths: ["lexicons/**"]`) and the concurrency group,
+# which should set `cancel-in-progress: false` so a publish is never cut short.
+on:
+  workflow_call:
+    inputs:
+      did:
+        description: DID of the account that publishes the lexicons.
+        type: string
+        required: true
+      goat-version:
+        description: goat release tag to install.
+        type: string
+        default: v0.2.9
+      lexicons-dir:
+        description: Directory containing the lexicon JSON files.
+        type: string
+        default: lexicons/
+    secrets:
+      app-password:
+        description: App password for the publishing account.
+        required: true
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Require did and app-password
+        env:
+          DID: ${{ inputs.did }}
+          APP_PASSWORD: ${{ secrets.app-password }}
+        run: |
+          if [[ -z "$DID" ]]; then
+            echo "::error title=Missing did::did input is empty. Set the LEXICON_DID repository variable."
+            exit 1
+          fi
+          if [[ -z "$APP_PASSWORD" ]]; then
+            echo "::error title=Missing app-password::app-password secret is empty. Set the LEXICON_APP_PASSWORD repository secret."
+            exit 1
+          fi
+
+      # goat reads the lexicons directory from LEXICONS_DIR, never from argv.
+      - name: Validate lexicons-dir
+        id: dir
+        env:
+          INPUT_DIR: ${{ inputs.lexicons-dir }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error title=Invalid lexicons-dir::lexicons-dir must be a relative path of [A-Za-z0-9._/-] with no '..' segment and no segment starting with '-'."
+            exit 1
+          }
+
+          dir="$INPUT_DIR"
+          [[ -n "$dir" ]] || fail
+          [[ "$dir" =~ ^[A-Za-z0-9._/-]+$ ]] || fail
+          [[ "$dir" != /* ]] || fail
+
+          IFS=/ read -r -a parts <<<"$dir"
+          segs=()
+          for seg in "${parts[@]}"; do
+            if [[ -z "$seg" || "$seg" == "." ]]; then
+              continue
+            fi
+            [[ "$seg" != ".." ]] || fail
+            [[ "$seg" != -* ]] || fail
+            segs+=("$seg")
+          done
+          [[ "${#segs[@]}" -gt 0 ]] || fail
+
+          norm="$(IFS=/; echo "${segs[*]}")/"
+          echo "dir=$norm" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Must come after the caller checkout, which cleans the workspace. Fetches
+      # this workflow's own repo at the exact commit the caller resolved.
+      - name: Checkout lexicon-actions
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .lexicon-actions
+          persist-credentials: false
+
+      - name: Install goat
+        uses: ./.lexicon-actions/.github/actions/setup-goat # zizmor: ignore[self-repository] intentional: the action comes from the pinned checkout of this repo at job.workflow_sha, a different path than the caller's workspace root
+        with:
+          goat-version: ${{ inputs.goat-version }}
+
+      - name: Print goat version
+        run: goat -v
+
+      # Ephemeral login: nothing is written to disk. Verified against goat
+      # v0.2.9: `lex publish` has --username/--password flags sourced from
+      # GOAT_USERNAME/GOAT_PASSWORD (lex_publish.go:31-39), and
+      # loginOrLoadAuthClient logs in in memory when both are set
+      # (auth.go:88-111). The old `goat account login` persisted the app
+      # password itself to a session file (AuthSession.Password, auth.go:25,
+      # persisted at :31/:83), so this has no session file to leave behind, and
+      # no logout step. The credentials are in the environment of this one step
+      # only and never on argv.
+      - name: Publish lexicons
+        env:
+          GOAT_USERNAME: ${{ inputs.did }}
+          GOAT_PASSWORD: ${{ secrets.app-password }}
+          LEXICONS_DIR: ${{ steps.dir.outputs.dir }}
+        run: goat lex publish -u

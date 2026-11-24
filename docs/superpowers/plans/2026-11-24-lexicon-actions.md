@@ -4,13 +4,22 @@
 
 **Model:** Claude Opus, per Emelia (2026-11-24). Execution is subagent-driven, with a review after each task.
 
-**Goal:** Port germ-network/lexicon's lexicon CI into reusable workflows (`validate`, `comment`, `publish`) plus a pinned, verified `setup-goat` root action, then migrate germ onto them.
+**Goal:** Port germ-network/lexicon's lexicon CI into reusable workflows (`validate`, `comment`, `publish`) plus a pinned, verified internal `setup-goat` action, then migrate germ onto them.
 
 **Architecture:** Three `workflow_call` workflows own the security-critical job structure. Every job that needs our own files checks out lexicon-actions at `job.workflow_repository` + `job.workflow_sha` into `.lexicon-actions/`. Pass/fail logic and comment formatting live in plain Node scripts that share one results loader. That loader is the only place goat output is interpreted, and it's unit-tested against captured goat output.
 
 **Tech Stack:** GitHub Actions (reusable workflows, composite action), Node 24 (CommonJS, `node:test`, no dependencies), bash and jq in workflow steps, goat `v0.2.9`, actionlint.
 
 **Spec:** `docs/superpowers/specs/2026-11-24-lexicon-actions-design.md`
+
+## Amendments (2026-11-24, after final review)
+
+- A: check logs are written to `$RUNNER_TEMP/check-logs`; the artifact is renamed `lexicon-check-logs`.
+- B: comment identity via an optional GitHub App (`app-id` / `app-private-key`); comments still use `gh pr comment --edit-last`, with no comment-tagging scheme.
+- C: setup-goat is internal, at `.github/actions/setup-goat/` (with the checksums); no root action, no Marketplace.
+- D: publish uses an ephemeral in-memory login (`GOAT_USERNAME`/`GOAT_PASSWORD` on `goat lex publish`); no login, check-auth or logout steps.
+- E: the goat install logic lives in `scripts/install-goat.sh`; the action just calls it.
+- F: `comment.yml` takes an optional `app-id` input and `app-private-key` secret and mints a GitHub App token (pull requests: write) for commenting; the optional `github-token` secret was dropped.
 
 ## Global Constraints
 
@@ -20,7 +29,7 @@
 - Our-files checkout is always `repository: ${{ job.workflow_repository }}`, `ref: ${{ job.workflow_sha }}`, `path: .lexicon-actions`, `persist-credentials: false`.
 - Pinned third-party actions: `actions/checkout@v6`, `actions/upload-artifact@v6`, `actions/download-artifact@v7`, `actions/setup-node@v4` with `node-version: "24.x"`.
 - Required check names: `lexicon / detect-changes` and `lexicon / validate-changes` (caller job `lexicon`, reusable jobs `detect-changes` and `validate-changes`).
-- Artifact name: `check-logs`. `meta.json` shape: `{"pr": <int>, "finished": <bool>, "skipped"?: true, "blocking": {"breaking-warnings": <bool>, "dns": <bool>}, "lexicons-dir": "<string>"}`.
+- Artifact name: `lexicon-check-logs` (files written under `$RUNNER_TEMP/check-logs`). `meta.json` shape: `{"pr": <int>, "finished": <bool>, "skipped"?: true, "blocking": {"breaking-warnings": <bool>, "dns": <bool>}, "lexicons-dir": "<string>"}`.
 - A missing or non-boolean `blocking.*` means `true`. A missing or invalid `lexicons-dir` means `lexicons/`.
 - Scripts take no npm dependencies. `package.json` exists only for `pnpm test`.
 - Signed commits: `git commit` needs the 1Password agent socket, so run it **outside the Bash sandbox**. If Touch ID times out, stop and ask Emelia. Never use `--no-gpg-sign`.
@@ -38,9 +47,10 @@
 ## File Structure
 
 ```
-action.yml                          # Task 4: root composite action = setup-goat
+scripts/install-goat.sh              # Task 4: goat install logic (pinned + verified)
+.github/actions/setup-goat/action.yml  # Task 4: internal composite action = setup-goat
 keys/goat-release.asc               # Task 4 (variant A) or
-goat-checksums.txt                  # Task 4 (variant B): pinned per-version SHA-256s
+.github/actions/setup-goat/goat-checksums.txt  # Task 4 (variant B): pinned per-version SHA-256s
 scripts/lib/results.js              # Task 1: load + interpret goat output (single source of truth)
 scripts/report-failures.js          # Task 2: blocking decision + ::error annotations (validate)
 scripts/format-comment.js           # Task 3: PR comment markdown (comment)
@@ -156,10 +166,10 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
 - [ ] **Step 4: Run.** `pnpm test` → PASS.
 - [ ] **Step 5: Commit** `feat: port format-comment with blocking wording and fenced DNS output`.
 
-### Task 4: `setup-goat` root action ⚠️ starts with a gate
+### Task 4: `setup-goat` internal action ⚠️ starts with a gate
 
 **Files:**
-- Create: `action.yml`, plus `keys/goat-release.asc` (variant A) **or** `goat-checksums.txt` (variant B)
+- Create: `.github/actions/setup-goat/action.yml`, plus `keys/goat-release.asc` (variant A) **or** `.github/actions/setup-goat/goat-checksums.txt` (variant B)
 - Modify: `.github/workflows/test.yml` (add `setup-goat` jobs)
 
 **Interfaces:**
@@ -174,8 +184,8 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
   - Variant B: it isn't. Pin per-version SHA-256s.
   - If Bluesky now hosts an action that pins and verifies goat, skip this task. Instead, reference their action by SHA in Tasks 5 and 7.
 - [ ] **Step 3: Add the failing test jobs** to `test.yml`:
-  - `setup-goat` on a matrix of `ubuntu-latest` and `ubuntu-24.04-arm`: `uses: ./`, then assert that `goat -v` prints `goat version 0.2.9`.
-  - `setup-goat-bad-version`: `uses: ./` with `goat-version: "v0.2.9; echo pwned"`, `continue-on-error: true`, then assert the step outcome was `failure`.
+  - `setup-goat` on a matrix of `ubuntu-latest` and `ubuntu-24.04-arm`: `uses: ./.github/actions/setup-goat`, then assert that `goat -v` prints `goat version 0.2.9`.
+  - `setup-goat-bad-version`: `uses: ./.github/actions/setup-goat` with `goat-version: "v0.2.9; echo pwned"`, `continue-on-error: true`, then assert the step outcome was `failure`.
   - `setup-goat-tampered` (variant B only): point at a version missing from `goat-checksums.txt`, and assert failure.
 - [ ] **Step 4: Implement `action.yml`.**
   - Validate the version against the Global Constraints regex, via `env`.
@@ -186,13 +196,35 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
 - [ ] **Step 5: Verify locally.** `actionlint` passes clean. In CI, the jobs pass on the first push of this branch, which happens in Phase 2.
 - [ ] **Step 6: Commit** `feat: setup-goat root action with pinned, verified goat`.
 
+### Task 4b: `scripts/pin-goat.sh`, a maintainer tool for new goat releases
+
+Added at Emelia's request (2026-11-24), after she chose variant B (pinned SHA-256s) at
+the Task 4 gate.
+
+**Files:**
+- Create: `scripts/pin-goat.sh`, `keys/goat-release.asc` (bnewbold's public key, used only by this tool; it is never used at action runtime)
+
+**Interfaces:**
+- Produces: `scripts/pin-goat.sh <version>`, e.g. `scripts/pin-goat.sh v0.2.10`.
+  - Validates `<version>` against `^v[0-9]+\.[0-9]+\.[0-9]+$`.
+  - Downloads `goat_<ver-without-v>_checksums.txt` and its `.sig` into a `mktemp -d` dir.
+  - Verifies the signature with `gpg --homedir <tmp> --status-fd 1 --verify`, against `keys/goat-release.asc` imported into a temporary keyring. It requires a `[GNUPG:] VALIDSIG` line whose signing-key fingerprint is exactly `0C8E4A0DA8E9990872952B3B084425E080357D53`. A good signature from any other key fails, naming the key.
+  - Prints `<version> x86_64 <sha256>` and `<version> arm64 <sha256>` to stdout, ready to append to `goat-checksums.txt`.
+  - Exits non-zero on any failure, cleans up its temp dir, and never modifies repo files.
+  - Requires `curl`, `gpg` and `sha256sum` or `shasum -a 256`. It must run on macOS and Linux.
+
+- [ ] **Step 1:** Export the key: `gpg --export --armor 3F468108EE58663CB95AE9DC0C9337BCEC3932B9` from a temp keyring populated from `keyserver.ubuntu.com`, into `keys/goat-release.asc`. Add `keys/README.md` with the primary and signing-subkey fingerprints, where the key comes from (GitHub user bnewbold's registered key ID `0C9337BCEC3932B9`; the full key is on keyserver.ubuntu.com), and its expiry (2032-02-29).
+- [ ] **Step 2:** Run `scripts/pin-goat.sh v0.2.9`. Its output must equal the two v0.2.9 lines in `goat-checksums.txt` (`diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' goat-checksums.txt)` prints nothing). `scripts/pin-goat.sh 0.2.9` exits non-zero with a usage message.
+- [ ] **Step 3:** Add a `pin-goat` job to `test.yml` that runs `scripts/pin-goat.sh v0.2.9` and diffs its output against `goat-checksums.txt`. That catches table drift and key breakage. `shellcheck scripts/pin-goat.sh` must pass, if shellcheck is installed.
+- [ ] **Step 4: Commit** `feat: pin-goat maintainer tool for verifying goat releases`.
+
 ### Task 5: `validate.yml`
 
 **Files:**
 - Create: `.github/workflows/validate.yml` (port of germ's `ci.yml`)
 
 **Interfaces:**
-- Consumes: `action.yml` (Task 4), `scripts/report-failures.js` (Task 2).
+- Consumes: `.github/actions/setup-goat/action.yml` (Task 4), `scripts/report-failures.js` (Task 2).
 - Produces: `on: workflow_call` with these inputs:
   - `did` (string, required)
   - `goat-version` (string, default `v0.2.9`)
@@ -200,7 +232,7 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
   - `fail-on-breaking-warnings` (boolean, default `true`)
   - `fail-on-dns` (boolean, default `true`)
 
-  Jobs are `detect-changes` and `validate-changes`. It writes the `check-logs` artifact using the `meta.json` shape in Global Constraints.
+  Jobs are `detect-changes` and `validate-changes`. It writes the `lexicon-check-logs` artifact using the `meta.json` shape in Global Constraints.
 
 - [ ] **Step 1: `detect-changes`.**
   - Port germ's `changes` job.
@@ -214,7 +246,7 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
   - Run lint, breaking and check-dns each as `set -o pipefail; goat lex … | tee logs/X || echo $? > logs/X-exit-code`, so the step itself succeeds and the exit code is recorded. Lint and breaking pipe through `jq --slurp`.
   - The status step is a port, as is.
   - `meta.json`: `finished` is true when the lint, breaking and DNS steps all ran (`success` outcomes). Add `blocking` and `lexicons-dir` from inputs, passed via env and built with `jq --argjson`.
-  - Upload `check-logs`. Last step: `node .lexicon-actions/scripts/report-failures.js logs`, with `BLOCK_*` from inputs via env.
+  - Upload `lexicon-check-logs` (from `$RUNNER_TEMP/check-logs`). Last step: `node .lexicon-actions/scripts/report-failures.js "$LOGS_DIR"`, with `BLOCK_*` from inputs via env.
 - [ ] **Step 3: Verify.** `actionlint` passes clean, and `grep -n '\${{' .github/workflows/validate.yml` shows no expression inside a `run:` block.
 - [ ] **Step 4: Commit** `feat: reusable validate workflow`.
 
@@ -243,8 +275,8 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
 - Produces: `on: workflow_call` with inputs `did` (required), `goat-version` and `lexicons-dir`, and secret `app-password` (required). Job `publish`.
 
 - [ ] **Step 1: Port it.**
-  - Steps: checkout the caller, checkout our files, `uses: ./.lexicon-actions`, then `goat account login -u "$DID" -p "$APP_PASSWORD"` (both via env), `goat account check-auth`, `goat lex publish -u` with `LEXICONS_DIR`.
-  - `goat account logout` runs under `if: always()`.
+  - Steps: checkout the caller, checkout our files, `uses: ./.lexicon-actions/.github/actions/setup-goat`, then `goat lex publish -u` with `GOAT_USERNAME`, `GOAT_PASSWORD` and `LEXICONS_DIR` in that step's env (in-memory login).
+  - No login, check-auth or logout steps: no session file is written.
   - Fail early, with `::error title=Missing did::`, if `did` is empty.
 - [ ] **Step 2: Verify.** `actionlint` passes clean.
 - [ ] **Step 3: Commit** `feat: reusable publish workflow`.
@@ -275,7 +307,7 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
   - the inputs table
   - the security model, including the CODEOWNERS recommendation
   - fork PRs, marked "to be confirmed in Phase 4"
-  - `setup-goat` standalone usage, plus the key fingerprint (variant A) or the pinned-checksum note (variant B)
+  - ~~`setup-goat` standalone usage~~ (dropped: it is an internal action), plus the key fingerprint (variant A) or the pinned-checksum note (variant B)
   - versioning
 - [ ] **Step 2: Verify.** The caller YAML blocks pass actionlint: paste them into a scratch dir and run `actionlint <file>`.
 - [ ] **Step 3: Commit** `docs: adopter guide`.
@@ -293,6 +325,10 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
   - checks `lexicon / detect-changes` and `lexicon / validate-changes` both pass
   - record the exact check names shown and the `github.workflow_ref` value (add `echo "$GITHUB_WORKFLOW_REF"` to `detect-changes` temporarily, or read it from the logs)
   - close the PR without merging
+- [ ] **Step 3b:** Prepare the release commit.
+  - Remove the README's pre-release Status banner, and change "What it will do" to "What it does".
+  - Update the spec's Status line.
+  - Commit `docs: release v1.0.0`, so the tag lands on a commit whose README matches it.
 - [ ] **Step 4:** Ask Emelia, then create and push the tags: `git tag -s v1.0.0 -m v1.0.0 && git tag -s v1 -m v1 && git push origin v1.0.0 v1`.
 
 ## Phase 3: germ migration (Claude, **separate session launched from the germ-network/lexicon checkout**)
