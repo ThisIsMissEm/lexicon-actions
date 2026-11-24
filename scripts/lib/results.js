@@ -53,6 +53,20 @@ function readBlocking(meta) {
   return { breakingWarnings: get("breaking-warnings"), dns: get("dns") };
 }
 
+/**
+ * A lint/breaking check "failed to run" when its output is unusable (null), or
+ * empty while its exit code says it failed.
+ *
+ * @param {unknown[] | null | undefined} issues
+ * @param {string | null} exitCode
+ * @returns {boolean}
+ */
+function isCrash(issues, exitCode) {
+  return issues === null || issues === undefined
+    ? true
+    : issues.length === 0 && exitCode !== null && exitCode !== "0";
+}
+
 const readText = (file) => fs.readFile(file, "utf8").catch(() => null);
 
 async function readJson(file, accept) {
@@ -121,4 +135,10 @@ async function loadResults(logsDir) {
   };
 }
 
-module.exports = { loadResults, dnsStatus, normalizeLexiconsDir, readBlocking };
+module.exports = {
+  loadResults,
+  dnsStatus,
+  normalizeLexiconsDir,
+  readBlocking,
+  isCrash,
+};

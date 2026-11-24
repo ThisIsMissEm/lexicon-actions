@@ -1,11 +1,6 @@
-const { loadResults, dnsStatus } = require("./lib/results.js");
+const { loadResults, dnsStatus, isCrash } = require("./lib/results.js");
 
 const MAX_LISTED = 10;
-
-const isCrash = (issues, exitCode) =>
-  issues === null || issues === undefined
-    ? true
-    : issues.length === 0 && exitCode !== null && exitCode !== "0";
 
 function describe(issues) {
   const lines = issues.slice(0, MAX_LISTED).map((i) => {
