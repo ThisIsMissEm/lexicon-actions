@@ -40,6 +40,7 @@ jobs:
   # workflow can report that instead of an incomplete run.
   detect-changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       pull-requests: read
     outputs:
@@ -99,7 +100,15 @@ jobs:
           # (this includes the adopter's own caller file). A rename counts if
           # either its new or its previous path matches, so moving a lexicon
           # out of the directory is still validated.
-          if jq -e --arg dir "$LEXICONS_DIR" \
+          # The files API returns at most 3000 files. At that size the list may
+          # be truncated and could hide a lexicon change, so run the checks
+          # anyway. Lint, breaking and DNS cover the whole directory, so only
+          # the informational lexicon-files list can be incomplete.
+          count="$(jq 'length' <<<"$files")"
+          if [ "$count" -ge 3000 ]; then
+            echo "::warning title=Large pull request::This pull request changes $count or more files (the GitHub API lists at most 3000), so the lexicon checks always run. The list of changed lexicons in the comment may be incomplete."
+            echo "lexicons=true" >> "$GITHUB_OUTPUT"
+          elif jq -e --arg dir "$LEXICONS_DIR" \
             'any(.[] | .filename, (.previous_filename // empty); startswith($dir) or startswith(".github/workflows/"))' \
             <<<"$files" >/dev/null; then
             echo "lexicons=true" >> "$GITHUB_OUTPUT"
@@ -125,7 +134,7 @@ jobs:
           BLOCK_DNS: ${{ inputs.fail-on-dns }}
           LEXICONS_DIR: ${{ steps.dir.outputs.dir }}
         run: |
-          mkdir -p logs
+          rm -rf logs && mkdir -p logs
           jq -n \
             --argjson pr "$PR_NUMBER" \
             --argjson bw "$BLOCK_BREAKING_WARNINGS" \
@@ -143,6 +152,7 @@ jobs:
 
   validate-changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: detect-changes
     if: needs.detect-changes.outputs.lexicons == 'true'
     permissions:
@@ -180,14 +190,16 @@ jobs:
         with:
           goat-version: ${{ inputs.goat-version }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24.x"
 
       - name: Print goat version
         run: goat -v
 
-      - run: mkdir -p logs
+      # Start from an empty dir: a `logs/` committed in the PR must not
+      # contribute files to the artifact.
+      - run: rm -rf logs && mkdir -p logs
 
       # Each check records goat's exit code instead of failing the step. With
       # `pipefail` the pipeline status is the last non-zero exit (goat's, or

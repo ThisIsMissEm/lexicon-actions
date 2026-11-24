@@ -13,10 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24.x"
-      - run: node --test "test/**/*.test.js"
+      # `node --test` exits 0 when the glob matches nothing, so guard the count.
+      - name: Run unit tests
+        run: |
+          shopt -s nullglob
+          tests=(test/*.test.js)
+          if [ "${#tests[@]}" -lt 4 ]; then
+            echo "::error::Expected at least 4 test/*.test.js files, found ${#tests[@]}"
+            exit 1
+          fi
+          node --test "test/**/*.test.js"
 
   setup-goat:
     strategy:
