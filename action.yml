@@ -76,7 +76,7 @@ runs:
         asset="goat_Linux_${arch}.tar.gz"
         url="https://github.com/bluesky-social/goat/releases/download/${GOAT_VERSION}/${asset}"
         work="$(mktemp -d)"
-        curl -fsSL -o "$work/$asset" "$url"
+        curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$work/$asset" "$url"
         (cd "$work" && printf '%s  %s\n' "$expected" "$asset" | sha256sum --check --strict -)
 
         bindir="$RUNNER_TEMP/goat-bin"

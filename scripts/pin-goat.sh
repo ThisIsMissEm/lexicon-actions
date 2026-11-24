@@ -34,9 +34,9 @@ sums="$work/checksums.txt"
 sig="$work/checksums.txt.sig"
 asset="goat_${bare}_checksums.txt"
 
-curl -fsSL --proto '=https' -o "$sums" "${REPO_URL}/${version}/${asset}" \
+curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$sums" "${REPO_URL}/${version}/${asset}" \
   || die "failed to download ${asset}"
-curl -fsSL --proto '=https' -o "$sig" "${REPO_URL}/${version}/${asset}.sig" \
+curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$sig" "${REPO_URL}/${version}/${asset}.sig" \
   || die "failed to download ${asset}.sig"
 
 gnupg="$work/gnupg"
