@@ -315,6 +315,10 @@ the Task 4 gate.
   - checks `lexicon / detect-changes` and `lexicon / validate-changes` both pass
   - record the exact check names shown and the `github.workflow_ref` value (add `echo "$GITHUB_WORKFLOW_REF"` to `detect-changes` temporarily, or read it from the logs)
   - close the PR without merging
+- [ ] **Step 3b:** Prepare the release commit.
+  - Remove the README's pre-release Status banner, and change "What it will do" to "What it does".
+  - Update the spec's Status line.
+  - Commit `docs: release v1.0.0`, so the tag lands on a commit whose README matches it.
 - [ ] **Step 4:** Ask Emelia, then create and push the tags: `git tag -s v1.0.0 -m v1.0.0 && git tag -s v1 -m v1 && git push origin v1.0.0 v1`.
 
 ## Phase 3: germ migration (Claude, **separate session launched from the germ-network/lexicon checkout**)
