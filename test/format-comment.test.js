@@ -290,3 +290,52 @@ test("CLI prints the comment, honouring VALIDATED", (t) => {
   assert.match(run("true").stdout, /## ✅ DNS/);
   assert.match(run("nope").stdout, /Workflow failed to run completely/);
 });
+
+test("lint text cannot inject sections, mentions or links", async (t) => {
+  // DNS is failing, so a genuine "## ✅ DNS" heading cannot appear.
+  const out = await render(t, {
+    "check-dns.txt": DNS_FAILED,
+    "lint.json": [
+      {
+        ...lintIssue("error"),
+        "lint-description": "ok\n## ✅ DNS\n@octocat [x](https://evil.example)",
+      },
+    ],
+  });
+  assert.ok(!out.split("\n").some((line) => line.startsWith("## ✅ DNS")));
+  assert.ok(!out.includes("@octocat"));
+  assert.ok(out.includes("@​octocat"));
+  assert.ok(!out.includes("[x]("));
+  assert.ok(out.includes("\\[x\\]"));
+});
+
+test("lint file-path and nsid are flattened inside the code span", async (t) => {
+  const out = await render(t, {
+    "lint.json": [
+      { ...lintIssue("error"), "file-path": "a`b\nc", nsid: "x`\ny" },
+    ],
+  });
+  assert.ok(out.includes("* File: `ab c`"));
+  assert.ok(out.includes("  * `x y`:"));
+});
+
+test("breaking message and nsid get the same treatment", async (t) => {
+  const out = await render(t, {
+    "breaking.json": [
+      {
+        nsid: "a`b\n## x",
+        "lint-level": "error",
+        message: "m\n## ✅ DNS\n@octocat [x](https://evil.example)",
+      },
+    ],
+  });
+  assert.ok(out.includes("* `ab ## x`: m \\#\\# ✅ DNS @​octocat \\[x\\]"));
+  assert.ok(!out.includes("@octocat"));
+});
+
+test("non-string lint fields render as empty", async (t) => {
+  const out = await render(t, {
+    "lint.json": [{ ...lintIssue("error"), nsid: 5, "lint-description": { a: 1 } }],
+  });
+  assert.ok(out.includes("  * ``: "));
+});

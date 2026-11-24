@@ -6,6 +6,41 @@ const {
   isCrash,
 } = require("./lib/results.js");
 
+// The logs directory is untrusted (produced by the PR's own run) and this
+// script's output is posted by a privileged workflow. Every value read from it
+// is either validated (NSIDs, lexicon paths, exit codes), fenced with all
+// backticks removed (DNS text), or passed through codeSpan()/prose() below,
+// which flatten it to one line and neutralise markdown and @mentions.
+
+const str = (value) => (typeof value === "string" ? value : "");
+
+/**
+ * For values rendered inside a `code span` (nsid, file-path): one line, and no
+ * backtick that could close the span.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function codeSpan(value) {
+  return str(value).replace(/`/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * For free text (lint-description, message): one line, no backticks,
+ * markdown-active characters escaped, and mentions broken with U+200B.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function prose(value) {
+  return str(value)
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/`/g, "")
+    .replace(/[\\*_[\]<>!#|~]/g, "\\$&")
+    .replace(/@/g, "@​");
+}
+
 /**
  *
  * @param {*} checks
@@ -27,9 +62,11 @@ function formatChecks(checks) {
   const output = [];
 
   for (let [file, checks] of checksByFile) {
-    output.push(`* File: \`${file}\``);
+    output.push(`* File: \`${codeSpan(file)}\``);
     for (let check of checks) {
-      output.push(`  * \`${check.nsid}\`: ${check["lint-description"]}`);
+      output.push(
+        `  * \`${codeSpan(check.nsid)}\`: ${prose(check["lint-description"])}`,
+      );
     }
   }
 
@@ -54,7 +91,7 @@ function formatChanges(changes) {
 
   for (let [nsid, nsidChanges] of changesByNsid) {
     for (let change of nsidChanges) {
-      output.push(`* \`${nsid}\`: ${change.message}`);
+      output.push(`* \`${codeSpan(nsid)}\`: ${prose(change.message)}`);
     }
   }
 
