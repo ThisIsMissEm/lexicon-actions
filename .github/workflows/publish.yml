@@ -102,24 +102,18 @@ jobs:
       - name: Print goat version
         run: goat -v
 
-      # goat reads these from the environment (account.go: GOAT_USERNAME and
-      # GOAT_PASSWORD are among the flags' env sources), so no credential
-      # appears on argv.
-      - name: Login to goat
+      # Ephemeral login: nothing is written to disk. Verified against goat
+      # v0.2.9: `lex publish` has --username/--password flags sourced from
+      # GOAT_USERNAME/GOAT_PASSWORD (lex_publish.go:31-39), and
+      # loginOrLoadAuthClient logs in in memory when both are set
+      # (auth.go:88-111). The old `goat account login` persisted the app
+      # password itself to a session file (AuthSession.Password, auth.go:25,
+      # persisted at :31/:83), so this has no session file to leave behind, and
+      # no logout step. The credentials are in the environment of this one step
+      # only and never on argv.
+      - name: Publish lexicons
         env:
           GOAT_USERNAME: ${{ inputs.did }}
           GOAT_PASSWORD: ${{ secrets.app-password }}
-        run: goat account login
-
-      - name: Check authentication for goat
-        run: goat account check-auth
-
-      - name: Publish lexicons
-        env:
           LEXICONS_DIR: ${{ steps.dir.outputs.dir }}
         run: goat lex publish -u
-
-      # Always attempt to log out, even if an earlier step failed.
-      - name: Logout of goat
-        if: always()
-        run: goat account logout

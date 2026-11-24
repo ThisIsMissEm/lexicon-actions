@@ -167,7 +167,7 @@ No inputs. It reads everything it needs from the triggering event and the
 
 | Input | Type | Default | Description |
 | --- | --- | --- | --- |
-| `did` | string, required | | DID of the account that publishes the lexicons. Used as the login identity. |
+| `did` | string, required | | DID of the account that publishes the lexicons. Used as the login identity. goat logs in in memory for the publish step only, so no session file is written. |
 | `goat-version` | string | `v0.2.9` | goat release tag to install. |
 | `lexicons-dir` | string | `lexicons/` | Directory containing the lexicon JSON files. |
 | secret `app-password` | secret, required | | App password for the publishing account. |
@@ -234,9 +234,6 @@ checked.
 - The comment workflow edits the most recent `github-actions[bot]` comment on the
   PR (`--edit-last`). In repositories where other workflows also comment as that
   bot, it may overwrite their comment.
-- On self-hosted runners, goat's session file in `$HOME` relies on the
-  always-run logout step. If a runner is killed mid-job, the session file can
-  remain. Prefer GitHub-hosted runners.
 - Linux runners only (x86_64 and arm64).
 
 ## Maintainers: bumping goat
