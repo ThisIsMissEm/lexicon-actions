@@ -186,6 +186,28 @@ Hand-off step 1 is done: the repo exists, and `main` tracks `origin/main` at `ae
 - [ ] **Step 5: Verify locally.** `actionlint` passes clean. In CI, the jobs pass on the first push of this branch, which happens in Phase 2.
 - [ ] **Step 6: Commit** `feat: setup-goat root action with pinned, verified goat`.
 
+### Task 4b: `scripts/pin-goat.sh`, a maintainer tool for new goat releases
+
+Added at Emelia's request (2026-11-24), after she chose variant B (pinned SHA-256s) at
+the Task 4 gate.
+
+**Files:**
+- Create: `scripts/pin-goat.sh`, `keys/goat-release.asc` (bnewbold's public key, used only by this tool; it is never used at action runtime)
+
+**Interfaces:**
+- Produces: `scripts/pin-goat.sh <version>`, e.g. `scripts/pin-goat.sh v0.2.10`.
+  - Validates `<version>` against `^v[0-9]+\.[0-9]+\.[0-9]+$`.
+  - Downloads `goat_<ver-without-v>_checksums.txt` and its `.sig` into a `mktemp -d` dir.
+  - Verifies the signature with `gpg --homedir <tmp> --status-fd 1 --verify`, against `keys/goat-release.asc` imported into a temporary keyring. It requires a `[GNUPG:] VALIDSIG` line whose signing-key fingerprint is exactly `0C8E4A0DA8E9990872952B3B084425E080357D53`. A good signature from any other key fails, naming the key.
+  - Prints `<version> x86_64 <sha256>` and `<version> arm64 <sha256>` to stdout, ready to append to `goat-checksums.txt`.
+  - Exits non-zero on any failure, cleans up its temp dir, and never modifies repo files.
+  - Requires `curl`, `gpg` and `sha256sum` or `shasum -a 256`. It must run on macOS and Linux.
+
+- [ ] **Step 1:** Export the key: `gpg --export --armor 3F468108EE58663CB95AE9DC0C9337BCEC3932B9` from a temp keyring populated from `keyserver.ubuntu.com`, into `keys/goat-release.asc`. Add `keys/README.md` with the primary and signing-subkey fingerprints, where the key comes from (GitHub user bnewbold's registered key ID `0C9337BCEC3932B9`; the full key is on keyserver.ubuntu.com), and its expiry (2032-02-29).
+- [ ] **Step 2:** Run `scripts/pin-goat.sh v0.2.9`. Its output must equal the two v0.2.9 lines in `goat-checksums.txt` (`diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' goat-checksums.txt)` prints nothing). `scripts/pin-goat.sh 0.2.9` exits non-zero with a usage message.
+- [ ] **Step 3:** Add a `pin-goat` job to `test.yml` that runs `scripts/pin-goat.sh v0.2.9` and diffs its output against `goat-checksums.txt`. That catches table drift and key breakage. `shellcheck scripts/pin-goat.sh` must pass, if shellcheck is installed.
+- [ ] **Step 4: Commit** `feat: pin-goat maintainer tool for verifying goat releases`.
+
 ### Task 5: `validate.yml`
 
 **Files:**
