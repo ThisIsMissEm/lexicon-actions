@@ -12,8 +12,8 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.x"
       # `node --test` exits 0 when the glob matches nothing, so guard the count.
@@ -34,7 +34,7 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-goat
         id: goat
       - name: Assert goat is installed
@@ -48,7 +48,7 @@ jobs:
   setup-goat-bad-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-goat
         id: goat
         continue-on-error: true
@@ -62,7 +62,7 @@ jobs:
   setup-goat-unpinned:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-goat
         id: goat
         continue-on-error: true
@@ -78,14 +78,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Pin tool reproduces the committed v0.2.9 checksums
         run: diff <(scripts/pin-goat.sh v0.2.9) <(grep '^v0.2.9 ' .github/actions/setup-goat/goat-checksums.txt)
 
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       # Official actionlint image (rhysd/actionlint:1.7.7), pinned by digest so
       # the tag can't be moved under us. To bump: take the new tag's digest from
       # https://hub.docker.com/r/rhysd/actionlint/tags
@@ -93,3 +93,38 @@ jobs:
         uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
         with:
           args: -color
+
+  # pinact has no official container image, so use the release binary at an exact
+  # version. The expected SHA-256 is pinned here, copied from that release's
+  # published pinact_5.0.2_checksums.txt, so a swapped release asset fails the
+  # check. To bump: change TOOL_VERSION and TOOL_SHA256 together (v5.0.2 was
+  # released 2026-10-25).
+  pinact:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TOOL_VERSION: v5.0.2
+      TOOL_SHA256: 7f003d8f51e984c2264d2009d430e3e0e87ae404a0e2dc2a9a277b0f731bf5b7 # pinact_linux_amd64.tar.gz
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install pinact
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          asset="pinact_linux_amd64.tar.gz"
+          curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$work/$asset" \
+            "https://github.com/suzuki-shunsuke/pinact/releases/download/${TOOL_VERSION}/${asset}"
+          printf '%s  %s\n' "$TOOL_SHA256" "$asset" | (cd "$work" && sha256sum --check --strict -)
+          mkdir -p "$RUNNER_TEMP/pinact-bin"
+          tar -xzf "$work/$asset" -C "$RUNNER_TEMP/pinact-bin" pinact
+          echo "$RUNNER_TEMP/pinact-bin" >> "$GITHUB_PATH"
+      # Fails if any `uses:` is not pinned to a full commit SHA, or if a
+      # `# vX.Y.Z` comment doesn't match its SHA. GITHUB_TOKEN is read-only and
+      # only raises the API rate limit used to verify the comments.
+      - name: Check actions are SHA-pinned
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pinact run --fix=false --verify-comment

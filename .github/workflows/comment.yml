@@ -120,12 +120,10 @@ jobs:
       - name: Create GitHub App token
         id: app-token
         if: inputs.app-id != ''
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
-          # v3 marks `app-id` as deprecated in favour of `client-id`, but we keep
-          # `app-id` as our public input by owner decision. If the upstream
-          # action drops it, map our input internally.
-          app-id: ${{ inputs.app-id }}
+          # The action's client-id accepts the numeric App ID too (main.js:21), so we keep our input named app-id without hitting the deprecated input.
+          client-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.app-private-key }}
           permission-pull-requests: write
 
@@ -154,14 +152,14 @@ jobs:
       # repository at the exact commit being run (`job.workflow_sha`), giving
       # the reviewed scripts/format-comment.js.
       - name: Checkout lexicon-actions
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .lexicon-actions
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.x"
 
@@ -172,12 +170,10 @@ jobs:
       - name: Create GitHub App token
         id: app-token
         if: inputs.app-id != ''
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
-          # v3 marks `app-id` as deprecated in favour of `client-id`, but we keep
-          # `app-id` as our public input by owner decision. If the upstream
-          # action drops it, map our input internally.
-          app-id: ${{ inputs.app-id }}
+          # The action's client-id accepts the numeric App ID too (main.js:21), so we keep our input named app-id without hitting the deprecated input.
+          client-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.app-private-key }}
           permission-pull-requests: write
 
@@ -190,7 +186,7 @@ jobs:
       - name: Download check results
         id: download
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: lexicon-check-logs
           path: ${{ runner.temp }}/check-logs
