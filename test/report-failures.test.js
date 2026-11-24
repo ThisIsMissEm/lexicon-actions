@@ -84,7 +84,7 @@ test("breaking crash fails to run", () => {
 });
 
 test("DNS failed blocks only when dns is true", () => {
-  const r = clean({ dnsText: DNS_FAILED, dnsExitCode: "1" });
+  const r = clean({ dnsText: DNS_FAILED });
   assert.deepEqual(titles(r, ALL), ["DNS records missing"]);
   assert.deepEqual(titles(r, { breakingWarnings: true, dns: false }), []);
 });
@@ -109,6 +109,18 @@ test("DNS crash fails to run regardless of dns setting", () => {
       titles(clean({ dnsText: "", dnsExitCode: "1" }), blocking),
       ["DNS check failed to run"],
     );
+  }
+});
+
+test("DNS exit code present is a single crash failure whatever the text", () => {
+  const off = { breakingWarnings: true, dns: false };
+  for (const dnsText of [DNS_FAILED, DNS_OK]) {
+    for (const blocking of [ALL, off]) {
+      assert.deepEqual(
+        titles(clean({ dnsText, dnsExitCode: "1" }), blocking),
+        ["DNS check failed to run"],
+      );
+    }
   }
 });
 
@@ -140,7 +152,6 @@ test("CLI exits 1 and prints annotations", () => {
     fs.writeFileSync(path.join(dir, "lint.json"), "[]");
     fs.writeFileSync(path.join(dir, "breaking.json"), "[]");
     fs.writeFileSync(path.join(dir, "check-dns.txt"), DNS_FAILED);
-    fs.writeFileSync(path.join(dir, "check-dns-exit-code"), "1\n");
 
     const run = spawnSync(
       process.execPath,
@@ -160,7 +171,6 @@ test("CLI exits 0 when the only failure is a non-blocking DNS finding", () => {
     fs.writeFileSync(path.join(dir, "lint.json"), "[]");
     fs.writeFileSync(path.join(dir, "breaking.json"), "[]");
     fs.writeFileSync(path.join(dir, "check-dns.txt"), DNS_FAILED);
-    fs.writeFileSync(path.join(dir, "check-dns-exit-code"), "1\n");
 
     const run = spawnSync(
       process.execPath,

@@ -55,11 +55,8 @@ function evaluate(results, blocking) {
   }
 
   const dns = dnsStatus(results.dnsText);
-  const dnsCrashed =
-    dns === "missing" ||
-    (dns === "unknown" &&
-      results.dnsExitCode !== null &&
-      results.dnsExitCode !== "0");
+  // goat check-dns exits 0 on missing records; any exit code file means a crash.
+  const dnsCrashed = results.dnsExitCode !== null || dns === "missing";
   if (dnsCrashed) {
     failures.push({
       title: "DNS check failed to run",
