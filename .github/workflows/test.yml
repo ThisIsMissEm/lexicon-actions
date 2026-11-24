@@ -84,17 +84,12 @@ jobs:
 
   actionlint:
     runs-on: ubuntu-latest
-    env:
-      ACTIONLINT_VERSION: "1.7.7"
     steps:
       - uses: actions/checkout@v6
-      - name: Install actionlint
-        run: |
-          base="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
-          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL -O "${base}/${asset}"
-          curl -fsSL -O "${base}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
-          grep -F "  ${asset}" "actionlint_${ACTIONLINT_VERSION}_checksums.txt" | sha256sum --check -
-          tar -xzf "${asset}" actionlint
+      # Official actionlint image (rhysd/actionlint:1.7.7), pinned by digest so
+      # the tag can't be moved under us. To bump: take the new tag's digest from
+      # https://hub.docker.com/r/rhysd/actionlint/tags
       - name: Run actionlint
-        run: ./actionlint -color
+        uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+        with:
+          args: -color
